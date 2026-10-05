@@ -1,0 +1,148 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Perfil de usuario del sistema (Comprador, Vendedor o Administrador)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["buyer", "seller", "admin"] },
+        "photoURL": { "type": "string" },
+        "bio": { "type": "string" },
+        "location": { "type": "string" },
+        "favoriteBookIds": { "type": "array" },
+        "isBlocked": { "type": "boolean" },
+        "blockReason": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "email", "role"]
+    },
+    "Book": {
+      "title": "Book",
+      "description": "Ficha completa del libro para venta o lectura",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "author": { "type": "string" },
+        "isbn": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "condition": { "type": "string", "enum": ["nuevo", "usado", "digital"] },
+        "genre": { "type": "string" },
+        "language": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "sampleText": { "type": "string" },
+        "fullContent": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "sellerName": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "pending_review", "published", "rejected", "withdrawn"] },
+        "rejectionReason": { "type": "string" },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "salesCount": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "author", "price", "condition", "genre", "language", "sellerId", "status"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Transacción de compra confirmada",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "buyerId": { "type": "string" },
+        "buyerName": { "type": "string" },
+        "buyerEmail": { "type": "string" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "status": { "type": "string", "enum": ["completed", "pending"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "buyerId", "items", "totalAmount", "status", "createdAt"]
+    },
+    "LibraryItem": {
+      "title": "LibraryItem",
+      "description": "Libro adquirido por el comprador en su biblioteca digital",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "bookId": { "type": "string" },
+        "title": { "type": "string" },
+        "author": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "purchasedAt": { "type": "string" },
+        "lastReadPosition": { "type": "number" },
+        "bookmarks": { "type": "array" }
+      },
+      "required": ["id", "userId", "bookId", "title", "purchasedAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Valoración y opinión de un libro",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bookId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "bookId", "userId", "userName", "rating", "comment", "createdAt"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "Denuncia de moderación para libros o reseñas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reporterId": { "type": "string" },
+        "reporterName": { "type": "string" },
+        "targetType": { "type": "string", "enum": ["book", "review"] },
+        "targetId": { "type": "string" },
+        "targetTitle": { "type": "string" },
+        "reason": { "type": "string" },
+        "details": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "resolved", "dismissed"] },
+        "adminNote": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "reporterId", "targetType", "targetId", "reason", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "Perfiles y configuración de usuarios con roles y favoritos"
+    },
+    "/books/{bookId}": {
+      "schema": { "$ref": "Book" },
+      "description": "Catálogo de libros para venta, muestras y lectura digital"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "Order" },
+      "description": "Registro de compras y pagos completados"
+    },
+    "/library/{libraryId}": {
+      "schema": { "$ref": "LibraryItem" },
+      "description": "Biblioteca personal con progreso y marcadores de lectura"
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "Review" },
+      "description": "Reseñas y calificaciones comunitarias de libros"
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "Report" },
+      "description": "Denuncias y reportes para moderación administrativa"
+    }
+  }
+}
