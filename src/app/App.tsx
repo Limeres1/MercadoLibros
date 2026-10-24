@@ -3,16 +3,18 @@ import { AppProviders } from './AppProviders';
 import { AppLayout } from '../components/layout/AppLayout';
 import { NotFoundPage } from '../components/layout/NotFoundPage';
 import { RequireRole } from '../features/auth/RequireRole';
-import { ProfilePage } from '../features/auth/ProfilePage';
 import { CatalogPage } from '../features/catalog/CatalogPage';
-import { BookDetailPage } from '../features/catalog/BookDetailPage';
-import { FavoritesPage } from '../features/catalog/favorites/FavoritesPage';
-import { LibraryPage } from '../features/reader/LibraryPage';
-import { ReaderPage } from '../features/reader/ReaderPage';
-import { OrdersPage } from '../features/shop/OrdersPage';
-import { SellerDashboard } from '../features/seller/SellerDashboard';
-import { AdminDashboard } from '../features/admin/AdminDashboard';
 import { ROUTES } from '../constants/routes';
+import { lazyPage } from '../lib/lazyPage';
+
+const BookDetailPage = lazyPage(() => import('../features/catalog/BookDetailPage'), 'BookDetailPage');
+const FavoritesPage = lazyPage(() => import('../features/catalog/favorites/FavoritesPage'), 'FavoritesPage');
+const ProfilePage = lazyPage(() => import('../features/auth/ProfilePage'), 'ProfilePage');
+const LibraryPage = lazyPage(() => import('../features/reader/LibraryPage'), 'LibraryPage');
+const ReaderPage = lazyPage(() => import('../features/reader/ReaderPage'), 'ReaderPage');
+const OrdersPage = lazyPage(() => import('../features/shop/OrdersPage'), 'OrdersPage');
+const SellerDashboard = lazyPage(() => import('../features/seller/SellerDashboard'), 'SellerDashboard');
+const AdminDashboard = lazyPage(() => import('../features/admin/AdminDashboard'), 'AdminDashboard');
 
 export default function App() {
   return (
