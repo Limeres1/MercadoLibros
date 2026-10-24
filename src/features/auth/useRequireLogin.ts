@@ -1,6 +1,6 @@
-import { useToast } from '../../components/ui/Toast';
-import { useAuthModal } from './AuthModalProvider';
-import { useSession } from './SessionProvider';
+import { useToast } from '@/components/ui/Toast';
+import { useAuthModal } from '@/features/auth/AuthModalProvider';
+import { useSession } from '@/features/auth/SessionProvider';
 
 export function useRequireLogin() {
   const { currentUser } = useSession();

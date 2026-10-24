@@ -1,10 +1,12 @@
-import { Order } from '../../types';
-import { useToast } from '../../components/ui/Toast';
-import { useRequireLogin } from '../auth/useRequireLogin';
-import { useBooks } from '../catalog/BooksProvider';
-import { useLibrary } from '../reader/LibraryProvider';
-import { useCart } from './CartProvider';
-import { useOrders } from './OrdersProvider';
+import { useToast } from '@/components/ui/Toast';
+import { SHIPPING_COST } from '@/constants/statuses';
+import { useRequireLogin } from '@/features/auth/useRequireLogin';
+import { useBooks } from '@/features/catalog/BooksProvider';
+import { useLibrary } from '@/features/reader/LibraryProvider';
+import { useCart } from '@/features/shop/CartProvider';
+import { useOrders } from '@/features/shop/OrdersProvider';
+import { createId } from '@/lib/ids';
+import { Order } from '@/types';
 
 export function useCheckout() {
   const requireLogin = useRequireLogin();
@@ -22,36 +24,48 @@ export function useCheckout() {
       return false;
     }
 
+    const now = new Date().toISOString();
+    const hasPhysicalBooks = cart.some(({ book }) => book.condition !== 'digital');
+    const shippingCost = hasPhysicalBooks ? SHIPPING_COST : 0;
     const order: Order = {
-      id: 'ORD-' + Date.now(),
+      id: createId(),
       buyerId: user.id,
       buyerName: user.displayName,
       buyerEmail: user.email,
-      items: cart.map(({ book }) => ({
+      items: cart.map(({ book, quantity }) => ({
         bookId: book.id,
+        sellerId: book.sellerId,
         title: book.title,
         author: book.author,
         price: book.price,
+        quantity,
         coverUrl: book.coverUrl,
         condition: book.condition,
       })),
-      totalAmount: cartTotal,
+      sellerIds: [...new Set(cart.map(({ book }) => book.sellerId))],
+      subtotal: cartTotal,
+      shippingCost,
+      totalAmount: cartTotal + shippingCost,
       paymentMethod,
-      shippingAddress: address,
-      status: 'completed',
-      createdAt: new Date().toISOString(),
+      shippingAddress: hasPhysicalBooks ? address : undefined,
+      status: 'paid',
+      createdAt: now,
+      paidAt: now,
     };
 
     cart.forEach(({ book, quantity }) =>
-      updateBook(book.id, b => ({
-        salesCount: (b.salesCount || 0) + quantity,
-        stock: b.stock !== undefined ? Math.max(0, b.stock - quantity) : undefined,
-      }))
+      updateBook(book.id, current => ({
+        salesCount: (current.salesCount || 0) + quantity,
+        stock: current.stock !== undefined ? Math.max(0, current.stock - quantity) : undefined,
+      })),
     );
     addOrder(order);
-    addPurchasedBooks(cart.map(item => item.book));
+    addPurchasedBooks(
+      cart.map(item => item.book).filter(book => book.condition === 'digital'),
+      order.id,
+    );
     clearCart();
-    showToast('¡Compra realizada con éxito! Los libros ya están disponibles en tu Biblioteca.', 'success');
+    showToast('¡Compra realizada con éxito!', 'success');
     return true;
   };
 

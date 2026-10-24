@@ -1,10 +1,11 @@
 import React from 'react';
-import { createSafeContext } from '../../../lib/createSafeContext';
-import { usePersistentState } from '../../../hooks/usePersistentState';
-import { useToast } from '../../../components/ui/Toast';
-import { useRequireLogin } from '../../auth/useRequireLogin';
-import { useSession } from '../../auth/SessionProvider';
-import { STORAGE_KEYS } from '../../../constants/storageKeys';
+
+import { useToast } from '@/components/ui/Toast';
+import { STORAGE_KEYS } from '@/constants/storageKeys';
+import { useSession } from '@/features/auth/SessionProvider';
+import { useRequireLogin } from '@/features/auth/useRequireLogin';
+import { usePersistentState } from '@/hooks/usePersistentState';
+import { createSafeContext } from '@/lib/createSafeContext';
 
 interface FavoritesContextValue {
   favorites: string[];
@@ -21,7 +22,7 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { showToast } = useToast();
   const [byUser, setByUser] = usePersistentState<Record<string, string[]>>(STORAGE_KEYS.favorites, {});
 
-  const favorites = currentUser ? byUser[currentUser.id] ?? [] : [];
+  const favorites = currentUser ? (byUser[currentUser.id] ?? []) : [];
 
   const isFavorite = (bookId: string) => favorites.includes(bookId);
 
@@ -33,7 +34,10 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       ...prev,
       [user.id]: exists ? favorites.filter(id => id !== bookId) : [...favorites, bookId],
     }));
-    showToast(exists ? 'Libro removido de favoritos.' : '¡Libro agregado a tus favoritos!', exists ? 'info' : 'success');
+    showToast(
+      exists ? 'Libro removido de favoritos.' : '¡Libro agregado a tus favoritos!',
+      exists ? 'info' : 'success',
+    );
   };
 
   return <Provider value={{ favorites, isFavorite, toggleFavorite }}>{children}</Provider>;

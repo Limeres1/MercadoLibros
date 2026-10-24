@@ -9,7 +9,7 @@ const FIREBASE_MESSAGES: Record<string, string> = {
   'auth/network-request-failed': 'No hay conexión. Revisá tu internet e intentá de nuevo.',
   'auth/popup-closed-by-user': 'Se cerró la ventana antes de terminar el inicio de sesión.',
   'permission-denied': 'No tenés permiso para realizar esta acción.',
-  'unavailable': 'El servicio no está disponible en este momento. Intentá más tarde.',
+  unavailable: 'El servicio no está disponible en este momento. Intentá más tarde.',
   'not-found': 'No encontramos lo que buscabas.',
 };
 

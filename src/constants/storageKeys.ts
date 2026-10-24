@@ -1,12 +1,15 @@
+const PREFIX = 'mercadolibros_v2_';
+
 export const STORAGE_KEYS = {
-  users: 'mercadolibros_users',
-  session: 'mercadolibros_session',
-  books: 'mercadolibros_books',
-  reviews: 'mercadolibros_reviews',
-  reports: 'mercadolibros_reports',
-  favorites: 'mercadolibros_favorites_by_user',
-  library: 'mercadolibros_library',
-  orders: 'mercadolibros_orders',
-  cart: 'mercadolibros_cart',
-  readerSettings: 'mercadolibros_reader',
+  users: `${PREFIX}users`,
+  session: `${PREFIX}session`,
+  books: `${PREFIX}books`,
+  bookContents: `${PREFIX}book_contents`,
+  reviews: `${PREFIX}reviews`,
+  reports: `${PREFIX}reports`,
+  favorites: `${PREFIX}favorites`,
+  library: `${PREFIX}library`,
+  orders: `${PREFIX}orders`,
+  cart: `${PREFIX}cart`,
+  readerSettings: `${PREFIX}reader`,
 } as const;

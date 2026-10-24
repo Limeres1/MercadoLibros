@@ -1,6 +1,6 @@
-import { ReaderSettings } from '../../types';
-import { usePersistentState } from '../../hooks/usePersistentState';
-import { STORAGE_KEYS } from '../../constants/storageKeys';
+import { STORAGE_KEYS } from '@/constants/storageKeys';
+import { usePersistentState } from '@/hooks/usePersistentState';
+import { ReaderSettings } from '@/types';
 
 const DEFAULT_SETTINGS: ReaderSettings = {
   fontSize: 18,
@@ -10,7 +10,10 @@ const DEFAULT_SETTINGS: ReaderSettings = {
 };
 
 export function useReaderSettings() {
-  const [readerSettings, setReaderSettings] = usePersistentState<ReaderSettings>(STORAGE_KEYS.readerSettings, DEFAULT_SETTINGS);
+  const [readerSettings, setReaderSettings] = usePersistentState<ReaderSettings>(
+    STORAGE_KEYS.readerSettings,
+    DEFAULT_SETTINGS,
+  );
 
   const updateReaderSettings = (settings: Partial<ReaderSettings>) =>
     setReaderSettings(prev => ({ ...prev, ...settings }));

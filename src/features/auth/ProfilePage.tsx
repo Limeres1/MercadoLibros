@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, User, MapPin, Phone, Plus, Trash2, Award } from 'lucide-react';
-import { Book, UserProfile } from '../../types';
-import { useBooks } from '../catalog/BooksProvider';
-import { useSession } from './SessionProvider';
+import { ArrowLeft, Award, MapPin, Phone, Plus, Trash2, User } from 'lucide-react';
+
+import { FAVORITE_SHOWCASE_LIMIT } from '@/constants/statuses';
+import { useSession } from '@/features/auth/SessionProvider';
+import { useBooks } from '@/features/catalog/BooksProvider';
+import { Book, UserProfile } from '@/types';
 
 export const ProfilePage: React.FC = () => {
   const { currentUser } = useSession();
@@ -24,22 +26,22 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
 
   const selectedFavIds = currentUser.favoriteBookIds || [];
   const selectedFavBooks = selectedFavIds
-    .map(id => books.find(b => b.id === id))
-    .filter((b): b is Book => Boolean(b));
+    .map(id => books.find(book => book.id === id))
+    .filter((book): book is Book => Boolean(book));
 
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
     await updateUserProfile({
       displayName,
       photoURL,
       bio,
       location,
-      phone
+      phone,
     });
   };
 
   const handleAddFavoriteBook = (bookId: string) => {
-    if (selectedFavIds.length >= 4) return; // Strict max 4
+    if (selectedFavIds.length >= FAVORITE_SHOWCASE_LIMIT) return;
     if (selectedFavIds.includes(bookId)) return;
     const nextList = [...selectedFavIds, bookId];
     updateFavoriteBookIds(nextList);
@@ -54,7 +56,6 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
   return (
     <div className="animate-in fade-in duration-200">
       <div className="relative w-full max-w-2xl mx-auto bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200 flex flex-col">
-        
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/80">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-amber-100 text-amber-800 rounded-xl">
@@ -75,24 +76,23 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
         </div>
 
         <div className="flex-1 p-4 sm:p-6 space-y-6">
-          
           <form onSubmit={handleSaveProfile} className="space-y-4">
-            
             <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
               <img
-                src={photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80'}
+                src={
+                  photoURL ||
+                  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80'
+                }
                 alt={displayName}
                 className="w-16 h-16 rounded-full object-cover ring-4 ring-amber-500/20 shadow-md"
               />
               <div className="flex-1 w-full space-y-2">
                 <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    URL de Foto / Avatar
-                  </label>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">URL de Foto / Avatar</label>
                   <input
                     type="url"
                     value={photoURL}
-                    onChange={(e) => setPhotoURL(e.target.value)}
+                    onChange={event => setPhotoURL(event.target.value)}
                     placeholder="https://..."
                     className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-amber-500"
                   />
@@ -102,14 +102,12 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">
-                  Nombre Completo
-                </label>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Nombre Completo</label>
                 <input
                   type="text"
                   required
                   value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
+                  onChange={event => setDisplayName(event.target.value)}
                   className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-amber-500"
                 />
               </div>
@@ -127,15 +125,13 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">
-                  Ubicación / Ciudad
-                </label>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Ubicación / Ciudad</label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-3 w-3.5 h-3.5 text-slate-400" />
                   <input
                     type="text"
                     value={location}
-                    onChange={(e) => setLocation(e.target.value)}
+                    onChange={event => setLocation(event.target.value)}
                     placeholder="Ej: Buenos Aires, Argentina"
                     className="w-full pl-9 p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-amber-500"
                   />
@@ -143,15 +139,13 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">
-                  Teléfono de Contacto
-                </label>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Teléfono de Contacto</label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-3 w-3.5 h-3.5 text-slate-400" />
                   <input
                     type="text"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={event => setPhone(event.target.value)}
                     placeholder="+54 11 ..."
                     className="w-full pl-9 p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-amber-500"
                   />
@@ -160,13 +154,11 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">
-                Biografía o Resumen de Lectura
-              </label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1">Biografía o Resumen de Lectura</label>
               <textarea
                 rows={2}
                 value={bio}
-                onChange={(e) => setBio(e.target.value)}
+                onChange={event => setBio(event.target.value)}
                 placeholder="Cuéntale a la comunidad tus géneros predilectos, autores favoritos..."
                 className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-amber-500 resize-none"
               />
@@ -190,11 +182,12 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
                   <span>Mis 4 Libros Favoritos en el Perfil</span>
                 </h4>
                 <p className="text-xs text-slate-500">
-                  Destaca en tu perfil tus 4 lecturas de cabecera ({selectedFavIds.length}/4 seleccionados)
+                  Destaca en tu perfil tus {FAVORITE_SHOWCASE_LIMIT} lecturas de cabecera ({selectedFavIds.length}/
+                  {FAVORITE_SHOWCASE_LIMIT} seleccionados)
                 </p>
               </div>
 
-              {selectedFavIds.length < 4 && !isSelectingBook && (
+              {selectedFavIds.length < FAVORITE_SHOWCASE_LIMIT && !isSelectingBook && (
                 <button
                   type="button"
                   onClick={() => setIsSelectingBook(true)}
@@ -220,7 +213,7 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
 
                 <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
                   {books
-                    .filter(b => !selectedFavIds.includes(b.id))
+                    .filter(book => !selectedFavIds.includes(book.id))
                     .map(book => (
                       <button
                         key={book.id}
@@ -247,16 +240,14 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
             )}
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[0, 1, 2, 3].map((slotIdx) => {
+              {[0, 1, 2, 3].map(slotIdx => {
                 const book = selectedFavBooks[slotIdx];
 
                 return (
                   <div
                     key={slotIdx}
                     className={`rounded-2xl border p-3 flex flex-col items-center justify-center text-center relative aspect-3/4 transition-all ${
-                      book
-                        ? 'bg-slate-50 border-slate-200 shadow-2xs'
-                        : 'border-dashed border-slate-300 bg-slate-50/50'
+                      book ? 'bg-slate-50 border-slate-200 shadow-2xs' : 'border-dashed border-slate-300 bg-slate-50/50'
                     }`}
                   >
                     <span className="absolute top-2 left-2 w-5 h-5 rounded-full bg-slate-800 text-white font-bold text-[10px] flex items-center justify-center">
@@ -295,11 +286,8 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
                 );
               })}
             </div>
-
           </div>
-
         </div>
-
       </div>
     </div>
   );

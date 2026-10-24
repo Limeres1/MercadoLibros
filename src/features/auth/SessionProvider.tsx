@@ -1,18 +1,21 @@
 import React from 'react';
 import {
-  signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signOut,
   sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut,
 } from 'firebase/auth';
-import { UserProfile, UserRole } from '../../types';
-import { INITIAL_USERS } from '../../data/initialData';
-import { auth } from '../../services/firebase';
-import { createSafeContext } from '../../lib/createSafeContext';
-import { usePersistentState } from '../../hooks/usePersistentState';
-import { useToast } from '../../components/ui/Toast';
-import { useAuthModal } from './AuthModalProvider';
-import { STORAGE_KEYS } from '../../constants/storageKeys';
+
+import { useToast } from '@/components/ui/Toast';
+import { FAVORITE_SHOWCASE_LIMIT } from '@/constants/statuses';
+import { STORAGE_KEYS } from '@/constants/storageKeys';
+import { INITIAL_USERS } from '@/data/initialData';
+import { useAuthModal } from '@/features/auth/AuthModalProvider';
+import { usePersistentState } from '@/hooks/usePersistentState';
+import { createSafeContext } from '@/lib/createSafeContext';
+import { createId } from '@/lib/ids';
+import { auth } from '@/services/firebase';
+import { UserProfile, UserRole } from '@/types';
 
 interface SessionContextValue {
   currentUser: UserProfile | null;
@@ -37,7 +40,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [users, setUsers] = usePersistentState<UserProfile[]>(STORAGE_KEYS.users, INITIAL_USERS);
   const [currentUserId, setCurrentUserId] = usePersistentState<string | null>(STORAGE_KEYS.session, null);
 
-  const currentUser = users.find(u => u.id === currentUserId) ?? null;
+  const currentUser = users.find(user => user.id === currentUserId) ?? null;
   const currentRole: UserRole = currentUser ? currentUser.role : 'visitor';
 
   const switchDemoRole = (role: UserRole) => {
@@ -46,17 +49,20 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       showToast('Has cambiado al modo Visitante (No registrado).', 'info');
       return;
     }
-    const user = users.find(u => u.role === role);
+    const user = users.find(candidate => candidate.role === role);
     if (!user) return;
     setCurrentUserId(user.id);
     showToast(`Sesión cambiada a ${user.displayName}`, 'success');
   };
 
   const loginWithEmail = async (email: string, pass: string): Promise<boolean> => {
-    const foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    const foundUser = users.find(user => user.email.toLowerCase() === email.toLowerCase());
     if (foundUser) {
       if (foundUser.isBlocked) {
-        showToast(`Tu cuenta ha sido bloqueada. Motivo: ${foundUser.blockReason || 'Incumplimiento de términos'}`, 'error');
+        showToast(
+          `Tu cuenta ha sido bloqueada. Motivo: ${foundUser.blockReason || 'Incumplimiento de términos'}`,
+          'error',
+        );
         return false;
       }
       setCurrentUserId(foundUser.id);
@@ -78,7 +84,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       };
     } catch {
       profile = {
-        id: 'user_' + Date.now(),
+        id: createId(),
         email,
         displayName: email.split('@')[0],
         role: 'buyer',
@@ -86,7 +92,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         favoriteBookIds: [],
       };
     }
-    setUsers(prev => [...prev.filter(u => u.id !== profile.id), profile]);
+    setUsers(prev => [...prev.filter(user => user.id !== profile.id), profile]);
     setCurrentUserId(profile.id);
     closeAuth();
     showToast(`¡Bienvenido, ${profile.displayName}!`, 'success');
@@ -94,12 +100,9 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const registerWithEmail = async (email: string, pass: string, name: string, role: UserRole): Promise<boolean> => {
-    let uid = 'user_' + Date.now();
-    try {
-      const cred = await createUserWithEmailAndPassword(auth, email, pass);
-      uid = cred.user.uid;
-    } catch {
-    }
+    const uid = await createUserWithEmailAndPassword(auth, email, pass)
+      .then(cred => cred.user.uid)
+      .catch(() => createId());
 
     const newUser: UserProfile = {
       id: uid,
@@ -120,42 +123,44 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const logoutUser = async () => {
-    try {
-      await signOut(auth);
-    } catch {
-    }
+    await signOut(auth).catch(() => undefined);
     setCurrentUserId(null);
     showToast('Sesión cerrada correctamente.', 'info');
   };
 
   const sendPasswordReset = async (email: string): Promise<boolean> => {
-    try {
-      await sendPasswordResetEmail(auth, email);
-    } catch {
-    }
+    await sendPasswordResetEmail(auth, email).catch(() => undefined);
     showToast(`Si existe una cuenta con ${email}, te enviamos un correo para restablecer la contraseña.`, 'info');
     return true;
   };
 
   const updateUserProfile = async (data: Partial<UserProfile>) => {
     if (!currentUser) return;
-    setUsers(prev => prev.map(u => (u.id === currentUser.id ? { ...u, ...data } : u)));
+    setUsers(prev => prev.map(user => (user.id === currentUser.id ? { ...user, ...data } : user)));
     showToast('Perfil actualizado con éxito.', 'success');
   };
 
   const updateFavoriteBookIds = async (bookIds: string[]) => {
     if (!currentUser) return;
-    setUsers(prev => prev.map(u => (u.id === currentUser.id ? { ...u, favoriteBookIds: bookIds.slice(0, 4) } : u)));
-    showToast('Tus 4 libros favoritos han sido actualizados en tu perfil.', 'success');
+    setUsers(prev =>
+      prev.map(user =>
+        user.id === currentUser.id ? { ...user, favoriteBookIds: bookIds.slice(0, FAVORITE_SHOWCASE_LIMIT) } : user,
+      ),
+    );
+    showToast('Tus libros favoritos del perfil han sido actualizados.', 'success');
   };
 
   const setUserBlocked = (userId: string, blocked: boolean, reason?: string) => {
     setUsers(prev =>
-      prev.map(u =>
-        u.id === userId
-          ? { ...u, isBlocked: blocked, blockReason: blocked ? reason || 'Infracción de normas comunitarias' : undefined }
-          : u
-      )
+      prev.map(user =>
+        user.id === userId
+          ? {
+              ...user,
+              isBlocked: blocked,
+              blockReason: blocked ? reason || 'Infracción de normas comunitarias' : undefined,
+            }
+          : user,
+      ),
     );
   };
 

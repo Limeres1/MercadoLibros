@@ -1,17 +1,18 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { STORAGE_KEYS } from '../../constants/storageKeys';
-import { INITIAL_USERS } from '../../data/initialData';
-import { ToastProvider } from '../../components/ui/Toast';
-import { AuthModalProvider } from './AuthModalProvider';
-import { SessionProvider } from './SessionProvider';
-import { RequireRole } from './RequireRole';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+
+import { ToastProvider } from '@/components/ui/Toast';
+import { STORAGE_KEYS } from '@/constants/storageKeys';
+import { INITIAL_USERS } from '@/data/initialData';
+import { AuthModalProvider } from '@/features/auth/AuthModalProvider';
+import { RequireRole } from '@/features/auth/RequireRole';
+import { SessionProvider } from '@/features/auth/SessionProvider';
 
 vi.mock('../../services/firebase', () => ({ auth: {} }));
 
 const renderAs = (role: 'visitor' | 'buyer' | 'admin') => {
-  const user = INITIAL_USERS.find(u => u.role === role);
+  const user = INITIAL_USERS.find(candidate => candidate.role === role);
   if (user) localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(user.id));
   render(
     <MemoryRouter>
@@ -24,7 +25,7 @@ const renderAs = (role: 'visitor' | 'buyer' | 'admin') => {
           </SessionProvider>
         </AuthModalProvider>
       </ToastProvider>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 };
 

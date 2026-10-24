@@ -1,15 +1,23 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
-  SlidersHorizontal, ArrowUpDown, Star,
-  ShoppingBag, BookOpen, Heart, BookMarked, Sparkles, RotateCcw
+  ArrowUpDown,
+  BookMarked,
+  BookOpen,
+  Heart,
+  RotateCcw,
+  ShoppingBag,
+  SlidersHorizontal,
+  Sparkles,
+  Star,
 } from 'lucide-react';
-import { Book } from '../../types';
-import { useBooks } from './BooksProvider';
-import { useFavorites } from './favorites/FavoritesProvider';
-import { useCart } from '../shop/CartProvider';
-import { SampleReaderModal } from './SampleReaderModal';
-import { ROUTES, SEARCH_PARAM, paths } from '../../constants/routes';
+
+import { paths, ROUTES, SEARCH_PARAM } from '@/constants/routes';
+import { useBooks } from '@/features/catalog/BooksProvider';
+import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
+import { SampleReaderModal } from '@/features/catalog/SampleReaderModal';
+import { useCart } from '@/features/shop/CartProvider';
+import { Book } from '@/types';
 
 type SortOption = 'rating' | 'price_asc' | 'price_desc' | 'date_new';
 
@@ -27,58 +35,59 @@ export const CatalogPage: React.FC = () => {
   const [selectedLanguage, setSelectedLanguage] = useState<string>('todos');
   const [selectedCondition, setSelectedCondition] = useState<string>('todos');
   const [maxPrice, setMaxPrice] = useState<number>(30);
-  
+
   const [sortBy, setSortBy] = useState<SortOption>('rating');
 
   const genres = useMemo(() => {
-    const list = Array.from(new Set(books.map(b => b.genre))).filter(Boolean);
+    const list = Array.from(new Set(books.map(book => book.genre))).filter(Boolean);
     return ['todos', ...list];
   }, [books]);
 
   const languages = useMemo(() => {
-    const list = Array.from(new Set(books.map(b => b.language))).filter(Boolean);
+    const list = Array.from(new Set(books.map(book => book.language))).filter(Boolean);
     return ['todos', ...list];
   }, [books]);
 
   const filteredBooks = useMemo(() => {
-    let list = books.filter(b => b.status === 'published');
+    let list = books.filter(book => book.status === 'published');
 
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter(b => 
-        b.title.toLowerCase().includes(q) || 
-        b.author.toLowerCase().includes(q) ||
-        b.isbn.replace(/[- ]/g, '').includes(q.replace(/[- ]/g, '')) ||
-        b.genre.toLowerCase().includes(q)
+      const normalizedQuery = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        book =>
+          book.title.toLowerCase().includes(normalizedQuery) ||
+          book.author.toLowerCase().includes(normalizedQuery) ||
+          book.isbn.replace(/[- ]/g, '').includes(normalizedQuery.replace(/[- ]/g, '')) ||
+          book.genre.toLowerCase().includes(normalizedQuery),
       );
     }
 
     if (selectedGenre !== 'todos') {
-      list = list.filter(b => b.genre.toLowerCase() === selectedGenre.toLowerCase());
+      list = list.filter(book => book.genre.toLowerCase() === selectedGenre.toLowerCase());
     }
 
     if (selectedLanguage !== 'todos') {
-      list = list.filter(b => b.language.toLowerCase() === selectedLanguage.toLowerCase());
+      list = list.filter(book => book.language.toLowerCase() === selectedLanguage.toLowerCase());
     }
 
     if (selectedCondition !== 'todos') {
-      list = list.filter(b => b.condition === selectedCondition);
+      list = list.filter(book => book.condition === selectedCondition);
     }
 
-    list = list.filter(b => b.price <= maxPrice);
+    list = list.filter(book => book.price <= maxPrice);
 
-    list.sort((a, b) => {
+    list.sort((first, second) => {
       if (sortBy === 'rating') {
-        return (b.rating || 0) - (a.rating || 0);
+        return (second.rating || 0) - (first.rating || 0);
       }
       if (sortBy === 'price_asc') {
-        return a.price - b.price;
+        return first.price - second.price;
       }
       if (sortBy === 'price_desc') {
-        return b.price - a.price;
+        return second.price - first.price;
       }
       if (sortBy === 'date_new') {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime();
       }
       return 0;
     });
@@ -97,7 +106,6 @@ export const CatalogPage: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      
       <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-amber-950 via-slate-900 to-amber-900 text-white p-8 sm:p-12 shadow-xl">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.15),transparent_50%)]"></div>
         <div className="relative z-10 max-w-2xl space-y-4">
@@ -109,7 +117,8 @@ export const CatalogPage: React.FC = () => {
             Descubre, colecciona y lee grandes obras de la literatura.
           </h1>
           <p className="text-sm sm:text-base text-slate-300 leading-relaxed font-sans">
-            Comercio multilateral para adquirir libros nuevos, usados de colección y ediciones digitales con lector integrado y muestras gratuitas.
+            Comercio multilateral para adquirir libros nuevos, usados de colección y ediciones digitales con lector
+            integrado y muestras gratuitas.
           </p>
 
           <div className="flex flex-wrap gap-4 pt-2 text-xs font-medium text-amber-200">
@@ -122,7 +131,6 @@ export const CatalogPage: React.FC = () => {
       </div>
 
       <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-        
         <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="w-4 h-4 text-amber-600" />
@@ -135,7 +143,7 @@ export const CatalogPage: React.FC = () => {
             <label className="text-xs font-semibold text-slate-600">Ordenar por:</label>
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              onChange={event => setSortBy(event.target.value as SortOption)}
               className="text-xs font-medium bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-amber-500 text-slate-800"
             >
               <option value="rating">Mejor Valorados</option>
@@ -147,36 +155,33 @@ export const CatalogPage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
               Género Literario
             </label>
             <select
               value={selectedGenre}
-              onChange={(e) => setSelectedGenre(e.target.value)}
+              onChange={event => setSelectedGenre(event.target.value)}
               className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-amber-500 text-slate-800 capitalize"
             >
-              {genres.map(g => (
-                <option key={g} value={g} className="capitalize">
-                  {g === 'todos' ? 'Todos los géneros' : g}
+              {genres.map(genre => (
+                <option key={genre} value={genre} className="capitalize">
+                  {genre === 'todos' ? 'Todos los géneros' : genre}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-              Idioma
-            </label>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Idioma</label>
             <select
               value={selectedLanguage}
-              onChange={(e) => setSelectedLanguage(e.target.value)}
+              onChange={event => setSelectedLanguage(event.target.value)}
               className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-amber-500 text-slate-800"
             >
-              {languages.map(l => (
-                <option key={l} value={l}>
-                  {l === 'todos' ? 'Todos los idiomas' : l}
+              {languages.map(language => (
+                <option key={language} value={language}>
+                  {language === 'todos' ? 'Todos los idiomas' : language}
                 </option>
               ))}
             </select>
@@ -188,7 +193,7 @@ export const CatalogPage: React.FC = () => {
             </label>
             <select
               value={selectedCondition}
-              onChange={(e) => setSelectedCondition(e.target.value)}
+              onChange={event => setSelectedCondition(event.target.value)}
               className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-amber-500 text-slate-800"
             >
               <option value="todos">Todos los formatos</option>
@@ -203,7 +208,11 @@ export const CatalogPage: React.FC = () => {
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 Precio máx: ${maxPrice}
               </label>
-              {(selectedGenre !== 'todos' || selectedLanguage !== 'todos' || selectedCondition !== 'todos' || maxPrice < 30 || searchQuery) && (
+              {(selectedGenre !== 'todos' ||
+                selectedLanguage !== 'todos' ||
+                selectedCondition !== 'todos' ||
+                maxPrice < 30 ||
+                searchQuery) && (
                 <button
                   onClick={resetFilters}
                   className="text-[11px] text-amber-600 hover:underline flex items-center gap-1"
@@ -219,13 +228,11 @@ export const CatalogPage: React.FC = () => {
               max="30"
               step="1"
               value={maxPrice}
-              onChange={(e) => setMaxPrice(Number(e.target.value))}
+              onChange={event => setMaxPrice(Number(event.target.value))}
               className="w-full accent-amber-600 cursor-pointer h-2 bg-slate-100 rounded-lg"
             />
           </div>
-
         </div>
-
       </div>
 
       {filteredBooks.length === 0 ? (
@@ -244,7 +251,7 @@ export const CatalogPage: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {filteredBooks.map((book) => {
+          {filteredBooks.map(book => {
             const isFav = isFavorite(book.id);
 
             return (
@@ -260,23 +267,26 @@ export const CatalogPage: React.FC = () => {
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
                   />
-                  
-                  <span className={`absolute top-3 left-3 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider shadow-sm ${
-                    book.condition === 'nuevo' ? 'bg-emerald-600 text-white' :
-                    book.condition === 'usado' ? 'bg-amber-600 text-white' : 'bg-indigo-600 text-white'
-                  }`}>
+
+                  <span
+                    className={`absolute top-3 left-3 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider shadow-sm ${
+                      book.condition === 'nuevo'
+                        ? 'bg-emerald-600 text-white'
+                        : book.condition === 'usado'
+                          ? 'bg-amber-600 text-white'
+                          : 'bg-indigo-600 text-white'
+                    }`}
+                  >
                     {book.condition}
                   </span>
 
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
+                    onClick={event => {
+                      event.stopPropagation();
                       toggleFavorite(book.id);
                     }}
                     className={`absolute top-3 right-3 p-2 rounded-full shadow-md backdrop-blur-md transition-all ${
-                      isFav 
-                        ? 'bg-rose-500 text-white' 
-                        : 'bg-white/80 text-slate-700 hover:bg-white hover:text-rose-500'
+                      isFav ? 'bg-rose-500 text-white' : 'bg-white/80 text-slate-700 hover:bg-white hover:text-rose-500'
                     }`}
                     title="Añadir a favoritos"
                   >
@@ -285,8 +295,8 @@ export const CatalogPage: React.FC = () => {
 
                   <div className="absolute inset-x-3 bottom-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-2">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onClick={event => {
+                        event.stopPropagation();
                         setSampleBook(book);
                       }}
                       className="flex-1 py-2 px-3 bg-white/95 hover:bg-amber-50 text-slate-900 border border-slate-200 rounded-xl text-xs font-bold shadow-md flex items-center justify-center gap-1.5 backdrop-blur-xs transition-colors"
@@ -295,8 +305,8 @@ export const CatalogPage: React.FC = () => {
                       <span>Muestra</span>
                     </button>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onClick={event => {
+                        event.stopPropagation();
                         openDetail(book);
                       }}
                       className="py-2 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-md transition-colors"
@@ -307,10 +317,7 @@ export const CatalogPage: React.FC = () => {
                 </div>
 
                 <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                  <div 
-                    onClick={() => openDetail(book)}
-                    className="cursor-pointer space-y-1"
-                  >
+                  <div onClick={() => openDetail(book)} className="cursor-pointer space-y-1">
                     <div className="flex items-center justify-between text-[11px] text-slate-500">
                       <span className="font-semibold text-amber-700">{book.genre}</span>
                       <span>{book.language}</span>
@@ -319,16 +326,16 @@ export const CatalogPage: React.FC = () => {
                     <h3 className="font-bold text-sm text-slate-900 line-clamp-1 group-hover:text-amber-700 transition-colors">
                       {book.title}
                     </h3>
-                    
-                    <p className="text-xs text-slate-500 line-clamp-1">
-                      {book.author}
-                    </p>
+
+                    <p className="text-xs text-slate-500 line-clamp-1">{book.author}</p>
 
                     <div className="flex items-center gap-1.5 pt-1">
                       <div className="flex items-center text-amber-400">
                         <Star className="w-3.5 h-3.5 fill-amber-400" />
                       </div>
-                      <span className="text-xs font-bold text-slate-800">{book.rating > 0 ? book.rating : 'Nuevo'}</span>
+                      <span className="text-xs font-bold text-slate-800">
+                        {book.rating > 0 ? book.rating : 'Nuevo'}
+                      </span>
                       <span className="text-[10px] text-slate-400">({book.reviewCount})</span>
                     </div>
                   </div>
@@ -336,9 +343,7 @@ export const CatalogPage: React.FC = () => {
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
                     <div>
                       <p className="text-[10px] text-slate-400">Precio</p>
-                      <p className="text-lg font-black text-slate-900">
-                        ${book.price.toFixed(2)}
-                      </p>
+                      <p className="text-lg font-black text-slate-900">${book.price.toFixed(2)}</p>
                     </div>
 
                     <button
@@ -350,9 +355,7 @@ export const CatalogPage: React.FC = () => {
                       <span className="hidden sm:inline">Comprar</span>
                     </button>
                   </div>
-
                 </div>
-
               </div>
             );
           })}

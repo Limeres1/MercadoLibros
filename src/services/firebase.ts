@@ -12,7 +12,9 @@ const firebaseConfig = {
 };
 
 if (!firebaseConfig.apiKey) {
-  throw new Error('Falta la configuración de Firebase: copiá .env.example a .env.local y completá las variables VITE_FIREBASE_*.');
+  throw new Error(
+    'Falta la configuración de Firebase: copiá .env.example a .env.local y completá las variables VITE_FIREBASE_*.',
+  );
 }
 
 export const app = initializeApp(firebaseConfig);

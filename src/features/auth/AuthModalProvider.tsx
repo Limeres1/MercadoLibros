@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import { createSafeContext } from '../../lib/createSafeContext';
+
+import { createSafeContext } from '@/lib/createSafeContext';
 
 export type AuthTab = 'login' | 'register' | 'forgot';
 
@@ -25,9 +26,5 @@ export const AuthModalProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const closeAuth = useCallback(() => setIsAuthOpen(false), []);
 
-  return (
-    <Provider value={{ isAuthOpen, authTab, setAuthTab, openAuth, closeAuth }}>
-      {children}
-    </Provider>
-  );
+  return <Provider value={{ isAuthOpen, authTab, setAuthTab, openAuth, closeAuth }}>{children}</Provider>;
 };

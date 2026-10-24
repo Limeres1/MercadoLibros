@@ -1,7 +1,8 @@
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { EmptyState } from './EmptyState';
-import { ROUTES } from '../../constants/routes';
+
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ROUTES } from '@/constants/routes';
 
 interface State {
   hasError: boolean;

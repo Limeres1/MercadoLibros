@@ -1,12 +1,26 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { X, Bookmark as BookmarkIcon, ChevronLeft, ChevronRight, Settings2, Sun, Moon, Coffee, Type, Plus, Trash2, BookOpen } from 'lucide-react';
-import { Book, Bookmark, LibraryItem } from '../../types';
-import { ROUTES } from '../../constants/routes';
-import { EmptyState } from '../../components/ui/EmptyState';
-import { useBooks } from '../catalog/BooksProvider';
-import { useLibrary } from './LibraryProvider';
-import { useReaderSettings } from './useReaderSettings';
+import {
+  Bookmark as BookmarkIcon,
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  Coffee,
+  Moon,
+  Plus,
+  Settings2,
+  Sun,
+  Trash2,
+  Type,
+  X,
+} from 'lucide-react';
+
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ROUTES } from '@/constants/routes';
+import { useBooks } from '@/features/catalog/BooksProvider';
+import { useLibrary } from '@/features/reader/LibraryProvider';
+import { useReaderSettings } from '@/features/reader/useReaderSettings';
+import { Book, Bookmark, LibraryItem } from '@/types';
 
 export const ReaderPage: React.FC = () => {
   const { bookId } = useParams();
@@ -31,8 +45,10 @@ export const ReaderPage: React.FC = () => {
 const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libraryItem }) => {
   const navigate = useNavigate();
   const { readerSettings, updateReaderSettings } = useReaderSettings();
+  const { getBookContent } = useBooks();
+  const contentText = getBookContent(book.id)?.text;
   const { updateReadingProgress, addBookmark, deleteBookmark } = useLibrary();
-  const closeReader = () => navigate(ROUTES.library);
+  const closeReader = useCallback(() => navigate(ROUTES.library), [navigate]);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(10);
@@ -42,14 +58,14 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
   const [newBookmarkNote, setNewBookmarkNote] = useState('');
 
   const pagesText = useMemo(() => {
-    const raw = book.fullContent || book.sampleText || 'Contenido del libro.';
-    const paragraphs = raw.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-    
+    const raw = contentText || book.sampleText || 'Contenido del libro.';
+    const paragraphs = raw.split(/\n\s*\n/).filter(paragraph => paragraph.trim().length > 0);
+
     const pages: string[] = [];
     let currentBatch: string[] = [];
-    
-    paragraphs.forEach((p, idx) => {
-      currentBatch.push(p);
+
+    paragraphs.forEach((paragraph, idx) => {
+      currentBatch.push(paragraph);
       if (currentBatch.length >= 2 || idx === paragraphs.length - 1) {
         pages.push(currentBatch.join('\n\n'));
         currentBatch = [];
@@ -58,39 +74,42 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
 
     if (pages.length === 0) pages.push(raw);
     return pages;
-  }, [book]);
+  }, [contentText, book.sampleText]);
 
   useEffect(() => {
     const count = Math.max(pagesText.length, 1);
     setTotalPages(count);
-    
-    setCurrentPage(Math.min(libraryItem.lastReadPage || 1, count));
-  }, [book.id, pagesText]);
 
-  const handlePageChange = (newPage: number) => {
-    if (newPage < 1 || newPage > totalPages) return;
-    setCurrentPage(newPage);
-    updateReadingProgress(book.id, newPage);
-  };
+    setCurrentPage(Math.min(libraryItem.lastReadPage || 1, count));
+  }, [libraryItem.lastReadPage, pagesText]);
+
+  const handlePageChange = useCallback(
+    (newPage: number) => {
+      if (newPage < 1 || newPage > totalPages) return;
+      setCurrentPage(newPage);
+      updateReadingProgress(book.id, newPage);
+    },
+    [book.id, totalPages, updateReadingProgress],
+  );
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowRight' || event.key === 'PageDown') {
         handlePageChange(currentPage + 1);
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
         handlePageChange(currentPage - 1);
-      } else if (e.key === 'Escape') {
+      } else if (event.key === 'Escape') {
         closeReader();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentPage, totalPages]);
+  }, [closeReader, currentPage, handlePageChange]);
 
   const currentBookmarks: Bookmark[] = libraryItem.bookmarks;
 
-  const handleCreateBookmark = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateBookmark = (event: React.FormEvent) => {
+    event.preventDefault();
     const title = newBookmarkTitle.trim() || `Página ${currentPage} - ${pagesText[currentPage - 1]?.slice(0, 30)}...`;
     addBookmark(book.id, currentPage, title, newBookmarkNote.trim());
     setNewBookmarkTitle('');
@@ -101,29 +120,30 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
   const themeClasses = {
     light: 'bg-white text-slate-800 border-slate-200',
     sepia: 'bg-[#FBF0D9] text-[#4A3B2C] border-[#E8D9BE]',
-    dark: 'bg-[#18181B] text-[#E4E4E7] border-[#27272A]'
+    dark: 'bg-[#18181B] text-[#E4E4E7] border-[#27272A]',
   }[readerSettings.theme];
 
   const headerThemeClasses = {
     light: 'bg-slate-50/95 border-b border-slate-200 text-slate-800',
     sepia: 'bg-[#F4E8D0]/95 border-b border-[#E0D2B7] text-[#4A3B2C]',
-    dark: 'bg-[#121214]/95 border-b border-[#27272A] text-slate-200'
+    dark: 'bg-[#121214]/95 border-b border-[#27272A] text-slate-200',
   }[readerSettings.theme];
 
   const fontClasses = readerSettings.fontFamily === 'serif' ? 'font-serif' : 'font-sans';
-  
+
   const lineHeightClasses = {
     normal: 'leading-normal',
     relaxed: 'leading-relaxed',
-    loose: 'leading-loose'
+    loose: 'leading-loose',
   }[readerSettings.lineHeight];
 
   const progressPercentage = Math.round((currentPage / totalPages) * 100);
 
   return (
     <div className={`fixed inset-0 z-50 flex flex-col ${themeClasses} transition-colors duration-200`}>
-      
-      <header className={`px-4 sm:px-6 py-3 flex items-center justify-between shadow-2xs backdrop-blur-md ${headerThemeClasses} select-none`}>
+      <header
+        className={`px-4 sm:px-6 py-3 flex items-center justify-between shadow-2xs backdrop-blur-md ${headerThemeClasses} select-none`}
+      >
         <div className="flex items-center gap-3">
           <button
             onClick={closeReader}
@@ -142,7 +162,9 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
 
         <div className="flex items-center gap-1.5">
           <div className="hidden sm:flex items-center gap-2 mr-3 px-3 py-1 rounded-full text-xs font-medium border border-current opacity-80">
-            <span>Pág {currentPage} de {totalPages}</span>
+            <span>
+              Pág {currentPage} de {totalPages}
+            </span>
             <span>•</span>
             <span>{progressPercentage}%</span>
           </div>
@@ -243,9 +265,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
 
           <div className="mb-4">
             <div className="flex justify-between items-center mb-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Tamaño de letra
-              </label>
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tamaño de letra</label>
               <span className="text-xs font-bold text-amber-600">{readerSettings.fontSize}px</span>
             </div>
             <div className="flex items-center gap-3">
@@ -261,7 +281,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
                 max="26"
                 step="2"
                 value={readerSettings.fontSize}
-                onChange={(e) => updateReaderSettings({ fontSize: Number(e.target.value) })}
+                onChange={event => updateReaderSettings({ fontSize: Number(event.target.value) })}
                 className="flex-1 accent-amber-600 cursor-pointer"
               />
               <button
@@ -321,7 +341,6 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
               ))}
             </div>
           </div>
-
         </div>
       )}
 
@@ -337,7 +356,10 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
             </button>
           </div>
 
-          <form onSubmit={handleCreateBookmark} className="mb-4 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+          <form
+            onSubmit={handleCreateBookmark}
+            className="mb-4 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700"
+          >
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-amber-600">Marcador en Página {currentPage}</span>
             </div>
@@ -345,14 +367,14 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
               type="text"
               placeholder="Título del marcador (opcional)"
               value={newBookmarkTitle}
-              onChange={(e) => setNewBookmarkTitle(e.target.value)}
+              onChange={event => setNewBookmarkTitle(event.target.value)}
               className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg mb-2 outline-none focus:border-amber-500"
             />
             <textarea
               placeholder="Nota personal de lectura..."
               rows={2}
               value={newBookmarkNote}
-              onChange={(e) => setNewBookmarkNote(e.target.value)}
+              onChange={event => setNewBookmarkNote(event.target.value)}
               className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg mb-2 outline-none focus:border-amber-500 resize-none"
             />
             <button
@@ -386,15 +408,9 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
                       <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 font-bold text-[10px]">
                         Pág {bm.page}
                       </span>
-                      <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
-                        {bm.title}
-                      </p>
+                      <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">{bm.title}</p>
                     </div>
-                    {bm.note && (
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">
-                        "{bm.note}"
-                      </p>
-                    )}
+                    {bm.note && <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">"{bm.note}"</p>}
                   </div>
                   <button
                     onClick={() => deleteBookmark(book.id, bm.id)}
@@ -412,8 +428,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
 
       <main className="flex-1 overflow-y-auto flex items-center justify-center p-4 sm:p-8">
         <div className="w-full max-w-2xl mx-auto flex flex-col justify-between min-h-[60vh]">
-          
-          <div 
+          <div
             style={{ fontSize: `${readerSettings.fontSize}px` }}
             className={`${fontClasses} ${lineHeightClasses} space-y-6 text-justify`}
           >
@@ -425,12 +440,12 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
               {pagesText[currentPage - 1] || 'Fin del contenido disponible.'}
             </div>
           </div>
-
         </div>
       </main>
 
-      <footer className={`px-4 sm:px-8 py-3 flex items-center justify-between border-t shadow-xs select-none ${headerThemeClasses}`}>
-        
+      <footer
+        className={`px-4 sm:px-8 py-3 flex items-center justify-between border-t shadow-xs select-none ${headerThemeClasses}`}
+      >
         <button
           onClick={() => handlePageChange(currentPage - 1)}
           disabled={currentPage <= 1}
@@ -447,7 +462,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
             min="1"
             max={totalPages}
             value={currentPage}
-            onChange={(e) => handlePageChange(Number(e.target.value))}
+            onChange={event => handlePageChange(Number(event.target.value))}
             className="w-full accent-amber-600 cursor-pointer h-1.5 bg-slate-300 dark:bg-slate-700 rounded-lg"
           />
           <span className="text-xs opacity-75 font-mono">{totalPages}</span>
@@ -461,9 +476,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
           <span className="hidden sm:inline">Página siguiente</span>
           <ChevronRight className="w-4 h-4" />
         </button>
-
       </footer>
-
     </div>
   );
 };
