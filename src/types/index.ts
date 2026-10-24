@@ -9,7 +9,7 @@ export interface UserProfile {
   bio?: string;
   location?: string;
   phone?: string;
-  favoriteBookIds?: string[]; // Max 4 libros favoritos (RF-6)
+  favoriteBookIds?: string[]; // Max 4 libros favoritos
   isBlocked?: boolean;
   blockReason?: string;
   createdAt: string;
