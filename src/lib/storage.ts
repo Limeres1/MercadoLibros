@@ -7,13 +7,15 @@ export function readJSON<T>(key: string, fallback: T): T {
   }
 }
 
-export function writeJSON(key: string, value: unknown) {
+export function writeJSON(key: string, value: unknown): boolean {
   try {
     if (value === null || value === undefined) {
       localStorage.removeItem(key);
     } else {
       localStorage.setItem(key, JSON.stringify(value));
     }
+    return true;
   } catch {
+    return false;
   }
 }

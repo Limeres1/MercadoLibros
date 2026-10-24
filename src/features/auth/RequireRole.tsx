@@ -1,14 +1,15 @@
 import React from 'react';
 import { Link } from 'react-router';
 import { Lock, ShieldX } from 'lucide-react';
-import { UserRole } from '../../types';
-import { EmptyState } from '../../components/ui/EmptyState';
-import { useSession } from './SessionProvider';
-import { useAuthModal } from './AuthModalProvider';
-import { ROUTES } from '../../constants/routes';
+
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ROUTES } from '@/constants/routes';
+import { useAuthModal } from '@/features/auth/AuthModalProvider';
+import { useSession } from '@/features/auth/SessionProvider';
+import { AccountRole } from '@/types';
 
 interface RequireRoleProps {
-  roles?: Exclude<UserRole, 'visitor'>[];
+  roles?: AccountRole[];
   children: React.ReactNode;
 }
 
@@ -34,7 +35,7 @@ export const RequireRole: React.FC<RequireRoleProps> = ({ roles, children }) => 
     );
   }
 
-  if (roles && !roles.includes(currentUser.role as Exclude<UserRole, 'visitor'>)) {
+  if (roles && !roles.includes(currentUser.role)) {
     return (
       <EmptyState
         icon={ShieldX}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ROUTES, paths } from './routes';
+
+import { paths, ROUTES } from '@/constants/routes';
 
 describe('paths', () => {
   it('builds book and reader paths from the route patterns', () => {

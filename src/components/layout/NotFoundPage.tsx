@@ -1,8 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router';
 import { BookX } from 'lucide-react';
-import { EmptyState } from '../ui/EmptyState';
-import { ROUTES } from '../../constants/routes';
+
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ROUTES } from '@/constants/routes';
 
 export const NotFoundPage: React.FC = () => (
   <EmptyState

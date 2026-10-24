@@ -1,28 +1,40 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
-  ArrowLeft, Star, ShoppingBag, BookOpen, Heart, ShieldAlert,
-  MessageSquarePlus, Edit3, Trash2, User, Globe, BookX
+  ArrowLeft,
+  BookOpen,
+  BookX,
+  Edit3,
+  Globe,
+  Heart,
+  MessageSquarePlus,
+  ShieldAlert,
+  ShoppingBag,
+  Star,
+  Trash2,
+  User,
 } from 'lucide-react';
-import { Book, Review } from '../../types';
-import { EmptyState } from '../../components/ui/EmptyState';
-import { useToast } from '../../components/ui/Toast';
-import { useSession } from '../auth/SessionProvider';
-import { useRequireLogin } from '../auth/useRequireLogin';
-import { useCart } from '../shop/CartProvider';
-import { useBooks } from './BooksProvider';
-import { useFavorites } from './favorites/FavoritesProvider';
-import { useReviews } from './reviews/ReviewsProvider';
-import { ReportModal } from './reports/ReportModal';
-import { ReportTarget } from './reports/ReportsProvider';
-import { SampleReaderModal } from './SampleReaderModal';
+
+import { EmptyState } from '@/components/ui/EmptyState';
+import { useToast } from '@/components/ui/Toast';
+import { useSession } from '@/features/auth/SessionProvider';
+import { useRequireLogin } from '@/features/auth/useRequireLogin';
+import { useBooks } from '@/features/catalog/BooksProvider';
+import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
+import { ReportModal } from '@/features/catalog/reports/ReportModal';
+import { ReportTarget } from '@/features/catalog/reports/ReportsProvider';
+import { useReviews } from '@/features/catalog/reviews/ReviewsProvider';
+import { SampleReaderModal } from '@/features/catalog/SampleReaderModal';
+import { useCart } from '@/features/shop/CartProvider';
+import { Book, Review } from '@/types';
 
 export const BookDetailPage: React.FC = () => {
   const { bookId } = useParams();
   const { getBook } = useBooks();
   const { currentUser } = useSession();
   const book = bookId ? getBook(bookId) : undefined;
-  const isVisible = book && (book.status === 'published' || currentUser?.role === 'admin' || book.sellerId === currentUser?.id);
+  const isVisible =
+    book && (book.status === 'published' || currentUser?.role === 'admin' || book.sellerId === currentUser?.id);
 
   if (!book || !isVisible) {
     return (
@@ -61,11 +73,11 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
     if (requireLogin('Debes iniciar sesión para enviar una denuncia.')) setReportTarget(target);
   };
 
-  const bookReviews = reviews.filter(r => r.bookId === book.id);
-  const userExistingReview = currentUser ? bookReviews.find(r => r.userId === currentUser.id) : null;
+  const bookReviews = reviews.filter(review => review.bookId === book.id);
+  const userExistingReview = currentUser ? bookReviews.find(review => review.userId === currentUser.id) : null;
 
-  const handleCreateReview = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateReview = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!newComment.trim()) {
       showToast('Por favor escribe tu opinión literaria.', 'error');
       return;
@@ -82,8 +94,8 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
     setEditComment(rev.comment);
   };
 
-  const handleSaveEditedReview = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveEditedReview = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!editingReviewId || !editComment.trim()) return;
     await editReview(editingReviewId, editRating, editComment.trim());
     setEditingReviewId(null);
@@ -92,7 +104,6 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
   return (
     <div className="animate-in fade-in duration-200">
       <div className="relative w-full max-w-5xl mx-auto bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200/80 flex flex-col">
-
         <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50/80">
           <div className="flex items-center gap-2 min-w-0">
             <button
@@ -124,14 +135,11 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
             >
               <Heart className={`w-5 h-5 ${isFav ? 'fill-rose-500' : ''}`} />
             </button>
-
           </div>
         </div>
 
         <div className="flex-1 p-4 sm:p-8 space-y-8">
-          
           <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
-            
             <div className="md:col-span-4 flex flex-col items-center">
               <div className="relative group rounded-2xl overflow-hidden shadow-xl border border-slate-200/60 max-w-[240px] w-full aspect-2/3 bg-slate-100">
                 <img
@@ -139,10 +147,15 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
                   alt={book.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
-                <span className={`absolute top-3 left-3 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm ${
-                  book.condition === 'nuevo' ? 'bg-emerald-600 text-white' :
-                  book.condition === 'usado' ? 'bg-amber-600 text-white' : 'bg-indigo-600 text-white'
-                }`}>
+                <span
+                  className={`absolute top-3 left-3 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm ${
+                    book.condition === 'nuevo'
+                      ? 'bg-emerald-600 text-white'
+                      : book.condition === 'usado'
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-indigo-600 text-white'
+                  }`}
+                >
                   {book.condition === 'nuevo' ? 'Nuevo' : book.condition === 'usado' ? 'Usado' : 'Digital (eBook)'}
                 </span>
               </div>
@@ -171,9 +184,7 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
                   </span>
                 </div>
 
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight">
-                  {book.title}
-                </h1>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight">{book.title}</h1>
                 <p className="text-base text-slate-600 font-medium mt-1">
                   Por <span className="text-slate-900 font-semibold">{book.author}</span>
                 </p>
@@ -195,11 +206,11 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <p className="text-xs text-slate-500 font-medium">Precio final de venta:</p>
-                  <p className="text-3xl font-black text-slate-950">
-                    ${book.price.toFixed(2)}
-                  </p>
+                  <p className="text-3xl font-black text-slate-950">${book.price.toFixed(2)}</p>
                   <p className="text-[11px] text-emerald-700 font-medium mt-0.5">
-                    {book.condition === 'digital' ? '⚡ Entrega digital inmediata a tu Biblioteca' : '📦 Envío seguro a domicilio o retiro'}
+                    {book.condition === 'digital'
+                      ? '⚡ Entrega digital inmediata a tu Biblioteca'
+                      : '📦 Envío seguro a domicilio o retiro'}
                   </p>
                 </div>
 
@@ -223,16 +234,10 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
               </div>
 
               <div>
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-2">
-                  Sinopsis de la obra
-                </h3>
-                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
-                  {book.description}
-                </p>
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-2">Sinopsis de la obra</h3>
+                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{book.description}</p>
               </div>
-
             </div>
-
           </div>
 
           <div className="border-t border-slate-200 pt-8 space-y-6">
@@ -249,7 +254,10 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
             </div>
 
             {currentUser && !userExistingReview && (
-              <form onSubmit={handleCreateReview} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              <form
+                onSubmit={handleCreateReview}
+                className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3"
+              >
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                     <MessageSquarePlus className="w-4 h-4 text-amber-600" />
@@ -273,7 +281,7 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
                   rows={3}
                   placeholder="Comparte tu experiencia de lectura, calidad de la edición o reflexiones sobre la obra..."
                   value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
+                  onChange={event => setNewComment(event.target.value)}
                   className="w-full p-3 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 resize-none text-slate-800"
                 />
 
@@ -298,7 +306,7 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
                 </div>
               ) : (
                 bookReviews.map(rev => (
-                  <div 
+                  <div
                     key={rev.id}
                     className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-2 hover:border-slate-300 transition-colors"
                   >
@@ -314,7 +322,9 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
                                 onClick={() => setEditRating(star)}
                                 className="p-0.5 text-amber-400"
                               >
-                                <Star className={`w-4 h-4 ${star <= editRating ? 'fill-amber-400' : 'text-slate-300'}`} />
+                                <Star
+                                  className={`w-4 h-4 ${star <= editRating ? 'fill-amber-400' : 'text-slate-300'}`}
+                                />
                               </button>
                             ))}
                           </div>
@@ -322,7 +332,7 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
                         <textarea
                           rows={2}
                           value={editComment}
-                          onChange={(e) => setEditComment(e.target.value)}
+                          onChange={event => setEditComment(event.target.value)}
                           className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-amber-500"
                         />
                         <div className="flex justify-end gap-2">
@@ -346,7 +356,10 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2.5">
                             <img
-                              src={rev.userPhoto || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80'}
+                              src={
+                                rev.userPhoto ||
+                                'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80'
+                              }
                               alt={rev.userName}
                               className="w-7 h-7 rounded-full object-cover"
                             />
@@ -387,7 +400,13 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
                               </>
                             ) : (
                               <button
-                                onClick={() => openReport({ type: 'review', id: rev.id, title: `Reseña de ${rev.userName} sobre ${book.title}` })}
+                                onClick={() =>
+                                  openReport({
+                                    type: 'review',
+                                    id: rev.id,
+                                    title: `Reseña de ${rev.userName} sobre ${book.title}`,
+                                  })
+                                }
                                 className="p-1 text-slate-300 hover:text-red-500 rounded"
                                 aria-label="Denunciar reseña inapropiada"
                               >
@@ -397,20 +416,15 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
                           </div>
                         </div>
 
-                        <p className="text-xs text-slate-700 leading-relaxed font-sans pl-9">
-                          {rev.comment}
-                        </p>
+                        <p className="text-xs text-slate-700 leading-relaxed font-sans pl-9">{rev.comment}</p>
                       </>
                     )}
                   </div>
                 ))
               )}
             </div>
-
           </div>
-
         </div>
-
       </div>
 
       {isSampleOpen && <SampleReaderModal book={book} onClose={() => setIsSampleOpen(false)} />}

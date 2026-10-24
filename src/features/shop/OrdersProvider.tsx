@@ -1,9 +1,10 @@
 import React from 'react';
-import { Order } from '../../types';
-import { INITIAL_ORDERS } from '../../data/initialData';
-import { createSafeContext } from '../../lib/createSafeContext';
-import { usePersistentState } from '../../hooks/usePersistentState';
-import { STORAGE_KEYS } from '../../constants/storageKeys';
+
+import { STORAGE_KEYS } from '@/constants/storageKeys';
+import { INITIAL_ORDERS } from '@/data/initialData';
+import { usePersistentState } from '@/hooks/usePersistentState';
+import { createSafeContext } from '@/lib/createSafeContext';
+import { Order } from '@/types';
 
 interface OrdersContextValue {
   orders: Order[];

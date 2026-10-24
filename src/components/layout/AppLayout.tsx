@@ -1,11 +1,12 @@
 import React, { Suspense, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router';
-import { Navbar } from './Navbar';
-import { Footer } from './Footer';
-import { ErrorBoundary } from '../ui/ErrorBoundary';
-import { PageLoader } from '../ui/PageLoader';
-import { AuthModal } from '../../features/auth/AuthModal';
-import { CartCheckoutModal } from '../../features/shop/CartCheckoutModal';
+
+import { Footer } from '@/components/layout/Footer';
+import { Navbar } from '@/components/layout/Navbar';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { PageLoader } from '@/components/ui/PageLoader';
+import { AuthModal } from '@/features/auth/AuthModal';
+import { CartCheckoutModal } from '@/features/shop/CartCheckoutModal';
 
 export const AppLayout: React.FC = () => {
   const { pathname } = useLocation();

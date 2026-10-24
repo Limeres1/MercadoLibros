@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
-import { createSafeContext } from '../../lib/createSafeContext';
+import { AlertCircle, CheckCircle2, Info } from 'lucide-react';
+
+import { createSafeContext } from '@/lib/createSafeContext';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -40,7 +41,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <Provider value={{ showToast }}>
       {children}
-      <div aria-live="polite" className="fixed bottom-6 inset-x-4 sm:inset-x-auto sm:right-6 z-[60] flex justify-center">
+      <div
+        aria-live="polite"
+        className="fixed bottom-6 inset-x-4 sm:inset-x-auto sm:right-6 z-[60] flex justify-center"
+      >
         {toast && Icon && (
           <div
             role={toast.type === 'error' ? 'alert' : 'status'}

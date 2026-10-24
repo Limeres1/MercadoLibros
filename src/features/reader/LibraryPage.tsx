@@ -1,11 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router';
-import { Library, BookOpen, Bookmark, Star, Calendar } from 'lucide-react';
-import { LibraryItem } from '../../types';
-import { ROUTES, paths } from '../../constants/routes';
-import { useSession } from '../auth/SessionProvider';
-import { useBooks } from '../catalog/BooksProvider';
-import { useLibrary } from './LibraryProvider';
+import { Bookmark, BookOpen, Calendar, Library, Star } from 'lucide-react';
+
+import { paths, ROUTES } from '@/constants/routes';
+import { useSession } from '@/features/auth/SessionProvider';
+import { useBooks } from '@/features/catalog/BooksProvider';
+import { useLibrary } from '@/features/reader/LibraryProvider';
+import { LibraryItem } from '@/types';
 
 export const LibraryPage: React.FC = () => {
   const { currentUser } = useSession();
@@ -29,16 +30,13 @@ export const LibraryPage: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-2 rounded-xl bg-amber-100 text-amber-800">
               <Library className="w-5 h-5" />
             </span>
-            <h1 className="text-2xl font-black text-slate-900">
-              Mi Biblioteca Personal
-            </h1>
+            <h1 className="text-2xl font-black text-slate-900">Mi Biblioteca Personal</h1>
           </div>
           <p className="text-xs text-slate-500">
             Libros adquiridos con sincronización de progreso, lector integrado y marcadores.
@@ -63,7 +61,8 @@ export const LibraryPage: React.FC = () => {
           <BookOpen className="w-12 h-12 text-slate-300 mx-auto" />
           <h3 className="text-lg font-bold text-slate-800">Tu biblioteca está esperando su primera historia</h3>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Cuando adquieras libros físicos o digitales, aparecerán aquí para que disfrutes de la lectura en cualquier momento.
+            Cuando adquieras libros físicos o digitales, aparecerán aquí para que disfrutes de la lectura en cualquier
+            momento.
           </p>
           <button
             onClick={() => navigate(ROUTES.home)}
@@ -74,8 +73,8 @@ export const LibraryPage: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {userLibraryItems.map((item) => {
-            const matchedBook = books.find(b => b.id === item.bookId);
+          {userLibraryItems.map(item => {
+            const matchedBook = books.find(book => book.id === item.bookId);
             const total = item.totalPages || 10;
             const current = item.lastReadPage || 1;
             const progress = Math.min(100, Math.round((current / total) * 100));
@@ -97,14 +96,14 @@ export const LibraryPage: React.FC = () => {
                     <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded uppercase">
                       Lectura in-app
                     </span>
-                    <h3 
+                    <h3
                       onClick={() => handleOpenReader(item)}
                       className="font-bold text-sm text-slate-900 mt-1 line-clamp-1 cursor-pointer hover:text-amber-700 transition-colors"
                     >
                       {item.title}
                     </h3>
                     <p className="text-xs text-slate-500 truncate">{item.author}</p>
-                    
+
                     <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-2">
                       <Calendar className="w-3 h-3" />
                       <span>Comprado el {new Date(item.purchasedAt).toLocaleDateString()}</span>
@@ -113,7 +112,9 @@ export const LibraryPage: React.FC = () => {
                     {item.bookmarks.length > 0 && (
                       <div className="flex items-center gap-1 text-[11px] text-amber-700 font-medium mt-1">
                         <Bookmark className="w-3 h-3" />
-                        <span>{item.bookmarks.length} {item.bookmarks.length === 1 ? 'marcador guardado' : 'marcadores'}</span>
+                        <span>
+                          {item.bookmarks.length} {item.bookmarks.length === 1 ? 'marcador guardado' : 'marcadores'}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -122,10 +123,12 @@ export const LibraryPage: React.FC = () => {
                 <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-100">
                   <div className="flex justify-between text-xs">
                     <span className="text-slate-500 font-medium">Progreso de lectura</span>
-                    <span className="font-bold text-amber-700">{progress}% (Pág. {current} de {total})</span>
+                    <span className="font-bold text-amber-700">
+                      {progress}% (Pág. {current} de {total})
+                    </span>
                   </div>
                   <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-amber-600 rounded-full transition-all duration-500"
                       style={{ width: `${progress}%` }}
                     ></div>
@@ -151,13 +154,11 @@ export const LibraryPage: React.FC = () => {
                     </button>
                   )}
                 </div>
-
               </div>
             );
           })}
         </div>
       )}
-
     </div>
   );
 };

@@ -1,18 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useNavigate, useSearchParams } from 'react-router';
 import {
-  BookOpen, Search, ScanBarcode, ShoppingCart, Heart,
-  User, ShieldCheck, Store, Library, PackageCheck,
-  LogOut, LogIn, ChevronDown, BookMarked
+  BookMarked,
+  BookOpen,
+  ChevronDown,
+  Heart,
+  Library,
+  LogIn,
+  LogOut,
+  PackageCheck,
+  ScanBarcode,
+  Search,
+  ShieldCheck,
+  ShoppingCart,
+  Store,
+  User,
 } from 'lucide-react';
-import { UserRole } from '../../types';
-import { useSession } from '../../features/auth/SessionProvider';
-import { useAuthModal } from '../../features/auth/AuthModalProvider';
-import { useFavorites } from '../../features/catalog/favorites/FavoritesProvider';
-import { useReports } from '../../features/catalog/reports/ReportsProvider';
-import { BarcodeScannerModal } from '../../features/catalog/BarcodeScannerModal';
-import { useCart } from '../../features/shop/CartProvider';
-import { ROUTES, SEARCH_PARAM, paths } from '../../constants/routes';
+
+import { paths, ROUTES, SEARCH_PARAM } from '@/constants/routes';
+import { useAuthModal } from '@/features/auth/AuthModalProvider';
+import { useSession } from '@/features/auth/SessionProvider';
+import { BarcodeScannerModal } from '@/features/catalog/BarcodeScannerModal';
+import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
+import { useReports } from '@/features/catalog/reports/ReportsProvider';
+import { useCart } from '@/features/shop/CartProvider';
+import { UserRole } from '@/types';
 
 const DEMO_ROLES: { role: UserRole; label: string }[] = [
   { role: 'visitor', label: 'Visitante' },
@@ -49,13 +61,13 @@ export const Navbar: React.FC = () => {
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   const searchQuery = searchParams.get(SEARCH_PARAM) ?? '';
-  const pendingReportsCount = reports.filter(r => r.status === 'pending').length;
+  const pendingReportsCount = reports.filter(report => report.status === 'pending').length;
   const isSellerOrAdmin = currentRole === 'seller' || currentRole === 'admin';
 
   useEffect(() => {
     if (!isUserMenuOpen) return;
-    const handleClick = (e: MouseEvent) => {
-      if (!userMenuRef.current?.contains(e.target as Node)) setIsUserMenuOpen(false);
+    const handleClick = (event: MouseEvent) => {
+      if (!userMenuRef.current?.contains(event.target as Node)) setIsUserMenuOpen(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -101,7 +113,6 @@ export const Navbar: React.FC = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-2 sm:gap-3">
-
           <Link to={ROUTES.home} className="flex items-center gap-2.5 group shrink-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-amber-600 to-amber-700 flex items-center justify-center text-white shadow-md shadow-amber-600/20 group-hover:scale-105 transition-transform">
               <BookOpen className="w-5 h-5" aria-hidden="true" />
@@ -124,7 +135,7 @@ export const Navbar: React.FC = () => {
                 aria-label="Buscar libros"
                 placeholder="Buscar por título, autor o género..."
                 value={searchQuery}
-                onChange={e => handleSearch(e.target.value)}
+                onChange={event => handleSearch(event.target.value)}
                 className="w-full pl-10 pr-24 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-full text-sm text-slate-800 transition-all outline-none"
               />
               <button
@@ -169,7 +180,10 @@ export const Navbar: React.FC = () => {
                 <ShieldCheck className="w-4 h-4 text-red-600" aria-hidden="true" />
                 <span>Administración</span>
                 {pendingReportsCount > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-red-500 absolute top-1.5 right-1 animate-ping" aria-label="Denuncias pendientes"></span>
+                  <span
+                    className="w-2 h-2 rounded-full bg-red-500 absolute top-1.5 right-1 animate-ping"
+                    aria-label="Denuncias pendientes"
+                  ></span>
                 )}
               </NavLink>
             )}
@@ -193,7 +207,10 @@ export const Navbar: React.FC = () => {
               }
               aria-label="Mis libros favoritos"
             >
-              <Heart className={`w-5 h-5 ${favorites.length > 0 ? 'fill-rose-500 text-rose-500' : ''}`} aria-hidden="true" />
+              <Heart
+                className={`w-5 h-5 ${favorites.length > 0 ? 'fill-rose-500 text-rose-500' : ''}`}
+                aria-hidden="true"
+              />
               {favorites.length > 0 && (
                 <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
                   {favorites.length}
@@ -223,7 +240,10 @@ export const Navbar: React.FC = () => {
                   className="flex items-center gap-2 p-1 pl-2 hover:bg-slate-100 rounded-full border border-slate-200 transition-colors"
                 >
                   <img
-                    src={currentUser.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80'}
+                    src={
+                      currentUser.photoURL ||
+                      'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80'
+                    }
                     alt=""
                     className="w-7 h-7 rounded-full object-cover ring-2 ring-amber-500/30"
                   />
@@ -242,7 +262,12 @@ export const Navbar: React.FC = () => {
                       <p className="text-sm font-bold text-slate-900 truncate">{currentUser.displayName}</p>
                       <p className="text-xs text-slate-500 truncate">{currentUser.email}</p>
                       <span className="inline-block mt-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 uppercase tracking-wider">
-                        Rol: {currentUser.role === 'admin' ? 'Administrador' : currentUser.role === 'seller' ? 'Vendedor' : 'Comprador'}
+                        Rol:{' '}
+                        {currentUser.role === 'admin'
+                          ? 'Administrador'
+                          : currentUser.role === 'seller'
+                            ? 'Vendedor'
+                            : 'Comprador'}
                       </span>
                     </div>
 
@@ -313,7 +338,7 @@ export const Navbar: React.FC = () => {
               aria-label="Buscar libros"
               placeholder="Buscar título, autor o género..."
               value={searchQuery}
-              onChange={e => handleSearch(e.target.value)}
+              onChange={event => handleSearch(event.target.value)}
               className="w-full pl-9 pr-10 py-1.5 bg-slate-100 focus:bg-white border border-slate-200 rounded-full text-sm text-slate-800 outline-none"
             />
           </div>

@@ -1,11 +1,13 @@
 import React from 'react';
-import { Report } from '../../../types';
-import { INITIAL_REPORTS } from '../../../data/initialData';
-import { createSafeContext } from '../../../lib/createSafeContext';
-import { usePersistentState } from '../../../hooks/usePersistentState';
-import { useToast } from '../../../components/ui/Toast';
-import { useSession } from '../../auth/SessionProvider';
-import { STORAGE_KEYS } from '../../../constants/storageKeys';
+
+import { useToast } from '@/components/ui/Toast';
+import { docIds } from '@/constants/firestore';
+import { STORAGE_KEYS } from '@/constants/storageKeys';
+import { INITIAL_REPORTS } from '@/data/initialData';
+import { useSession } from '@/features/auth/SessionProvider';
+import { usePersistentState } from '@/hooks/usePersistentState';
+import { createSafeContext } from '@/lib/createSafeContext';
+import { Report } from '@/types';
 
 export interface ReportTarget {
   type: 'book' | 'review';
@@ -30,7 +32,7 @@ export const ReportsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const createReport = async (target: ReportTarget, reason: string, details: string) => {
     if (!currentUser) return;
     const report: Report = {
-      id: 'rep_' + Date.now(),
+      id: docIds.report(currentUser.id, target.type, target.id),
       reporterId: currentUser.id,
       reporterName: currentUser.displayName,
       targetType: target.type,
@@ -41,12 +43,12 @@ export const ReportsProvider: React.FC<{ children: React.ReactNode }> = ({ child
       status: 'pending',
       createdAt: new Date().toISOString(),
     };
-    setReports(prev => [report, ...prev]);
+    setReports(prev => [report, ...prev.filter(existing => existing.id !== report.id)]);
     showToast('Denuncia enviada. Un administrador la revisará a la brevedad.', 'success');
   };
 
   const setReportStatus = (reportId: string, status: Report['status'], adminNote?: string) => {
-    setReports(prev => prev.map(r => (r.id === reportId ? { ...r, status, adminNote } : r)));
+    setReports(prev => prev.map(report => (report.id === reportId ? { ...report, status, adminNote } : report)));
   };
 
   return <Provider value={{ reports, createReport, setReportStatus }}>{children}</Provider>;

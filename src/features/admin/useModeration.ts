@@ -1,8 +1,8 @@
-import { useToast } from '../../components/ui/Toast';
-import { useSession } from '../auth/SessionProvider';
-import { useBooks } from '../catalog/BooksProvider';
-import { useReviews } from '../catalog/reviews/ReviewsProvider';
-import { useReports } from '../catalog/reports/ReportsProvider';
+import { useToast } from '@/components/ui/Toast';
+import { useSession } from '@/features/auth/SessionProvider';
+import { useBooks } from '@/features/catalog/BooksProvider';
+import { useReports } from '@/features/catalog/reports/ReportsProvider';
+import { useReviews } from '@/features/catalog/reviews/ReviewsProvider';
 
 export function useModeration() {
   const { users, setUserBlocked } = useSession();
@@ -30,7 +30,7 @@ export function useModeration() {
   };
 
   const resolveReport = async (reportId: string, action: 'dismiss' | 'remove_target') => {
-    const report = reports.find(r => r.id === reportId);
+    const report = reports.find(candidate => candidate.id === reportId);
     if (!report) return;
 
     if (action === 'remove_target') {
@@ -41,13 +41,13 @@ export function useModeration() {
     setReportStatus(
       reportId,
       action === 'dismiss' ? 'dismissed' : 'resolved',
-      action === 'dismiss' ? 'Desestimada por falta de pruebas' : 'Contenido retirado por infracción'
+      action === 'dismiss' ? 'Desestimada por falta de pruebas' : 'Contenido retirado por infracción',
     );
     showToast(`Denuncia procesada: ${action === 'dismiss' ? 'Desestimada' : 'Contenido dado de baja'}`, 'success');
   };
 
   const toggleBlockUser = async (userId: string, reason?: string) => {
-    const user = users.find(u => u.id === userId);
+    const user = users.find(candidate => candidate.id === userId);
     if (!user) return;
     setUserBlocked(userId, !user.isBlocked, reason);
     showToast('Estado del usuario actualizado con éxito.', 'success');

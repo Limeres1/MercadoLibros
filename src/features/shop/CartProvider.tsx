@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Book, CartItem } from '../../types';
-import { createSafeContext } from '../../lib/createSafeContext';
-import { usePersistentState } from '../../hooks/usePersistentState';
-import { useToast } from '../../components/ui/Toast';
-import { useRequireLogin } from '../auth/useRequireLogin';
-import { STORAGE_KEYS } from '../../constants/storageKeys';
+
+import { useToast } from '@/components/ui/Toast';
+import { STORAGE_KEYS } from '@/constants/storageKeys';
+import { useRequireLogin } from '@/features/auth/useRequireLogin';
+import { usePersistentState } from '@/hooks/usePersistentState';
+import { createSafeContext } from '@/lib/createSafeContext';
+import { Book, CartItem } from '@/types';
 
 interface CartContextValue {
   cart: CartItem[];
@@ -41,7 +42,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCart(prev =>
       prev.some(item => item.book.id === book.id)
         ? prev.map(item => (item.book.id === book.id ? { ...item, quantity: item.quantity + 1 } : item))
-        : [...prev, { book, quantity: 1 }]
+        : [...prev, { book, quantity: 1 }],
     );
     showToast(`"${book.title}" añadido al carrito`, 'success');
     return true;

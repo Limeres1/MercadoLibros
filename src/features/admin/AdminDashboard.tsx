@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ShieldCheck, Check, X, Trash2, Ban, Eye } from 'lucide-react';
-import { paths } from '../../constants/routes';
-import { useSession } from '../auth/SessionProvider';
-import { useBooks } from '../catalog/BooksProvider';
-import { useReports } from '../catalog/reports/ReportsProvider';
-import { useModeration } from './useModeration';
+import { Ban, Check, Eye, ShieldCheck, Trash2, X } from 'lucide-react';
+
+import { paths } from '@/constants/routes';
+import { useModeration } from '@/features/admin/useModeration';
+import { useSession } from '@/features/auth/SessionProvider';
+import { useBooks } from '@/features/catalog/BooksProvider';
+import { useReports } from '@/features/catalog/reports/ReportsProvider';
 
 export const AdminDashboard: React.FC = () => {
   const { users } = useSession();
@@ -15,28 +16,28 @@ export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'moderation' | 'reports' | 'users'>('moderation');
-  
+
   const [rejectingBookId, setRejectingBookId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
 
   const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
   const [blockReason, setBlockReason] = useState('');
 
-  const pendingBooks = books.filter(b => b.status === 'pending_review');
-  const publishedBooks = books.filter(b => b.status === 'published');
+  const pendingBooks = books.filter(book => book.status === 'pending_review');
+  const publishedBooks = books.filter(book => book.status === 'published');
 
-  const pendingReports = reports.filter(r => r.status === 'pending');
+  const pendingReports = reports.filter(report => report.status === 'pending');
 
-  const handleConfirmReject = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleConfirmReject = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!rejectingBookId || !rejectionReason.trim()) return;
     await rejectBook(rejectingBookId, rejectionReason.trim());
     setRejectingBookId(null);
     setRejectionReason('');
   };
 
-  const handleConfirmBlock = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleConfirmBlock = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!blockingUserId) return;
     await toggleBlockUser(blockingUserId, blockReason.trim() || 'Infracción de normas');
     setBlockingUserId(null);
@@ -45,16 +46,13 @@ export const AdminDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-2 rounded-xl bg-red-100 text-red-800">
               <ShieldCheck className="w-5 h-5" />
             </span>
-            <h1 className="text-2xl font-black text-slate-900">
-              Panel de Administración y Moderación
-            </h1>
+            <h1 className="text-2xl font-black text-slate-900">Panel de Administración y Moderación</h1>
           </div>
           <p className="text-xs text-slate-500">
             Control de calidad de publicaciones, gestión de denuncias comunitarias y control de usuarios.
@@ -103,7 +101,6 @@ export const AdminDashboard: React.FC = () => {
 
       {activeTab === 'moderation' && (
         <div className="space-y-6">
-          
           <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between">
               <div>
@@ -125,7 +122,10 @@ export const AdminDashboard: React.FC = () => {
             ) : (
               <div className="divide-y divide-slate-100">
                 {pendingBooks.map(book => (
-                  <div key={book.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/60 transition-colors">
+                  <div
+                    key={book.id}
+                    className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/60 transition-colors"
+                  >
                     <div className="flex items-start gap-4 min-w-0">
                       <img
                         src={book.coverUrl}
@@ -142,7 +142,8 @@ export const AdminDashboard: React.FC = () => {
                         <h4 className="font-bold text-sm text-slate-900 truncate">{book.title}</h4>
                         <p className="text-xs text-slate-600">Por {book.author}</p>
                         <p className="text-[11px] text-slate-400">
-                          Vendedor: <strong>{book.sellerName}</strong> • Precio: <strong>${book.price.toFixed(2)}</strong> • ISBN: {book.isbn}
+                          Vendedor: <strong>{book.sellerName}</strong> • Precio:{' '}
+                          <strong>${book.price.toFixed(2)}</strong> • ISBN: {book.isbn}
                         </p>
                       </div>
                     </div>
@@ -203,23 +204,23 @@ export const AdminDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {publishedBooks.map(b => (
-                    <tr key={b.id} className="hover:bg-slate-50/60">
+                  {publishedBooks.map(book => (
+                    <tr key={book.id} className="hover:bg-slate-50/60">
                       <td className="px-6 py-3.5">
                         <div className="flex items-center gap-2">
-                          <img src={b.coverUrl} alt={b.title} className="w-8 h-10 object-cover rounded" />
+                          <img src={book.coverUrl} alt={book.title} className="w-8 h-10 object-cover rounded" />
                           <div>
-                            <p className="font-bold text-slate-900">{b.title}</p>
-                            <p className="text-slate-500 text-[11px]">{b.author}</p>
+                            <p className="font-bold text-slate-900">{book.title}</p>
+                            <p className="text-slate-500 text-[11px]">{book.author}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-3.5 font-medium">{b.sellerName}</td>
-                      <td className="px-6 py-3.5 font-bold">${b.price.toFixed(2)}</td>
-                      <td className="px-6 py-3.5">{b.salesCount || 0} ejemplares</td>
+                      <td className="px-6 py-3.5 font-medium">{book.sellerName}</td>
+                      <td className="px-6 py-3.5 font-bold">${book.price.toFixed(2)}</td>
+                      <td className="px-6 py-3.5">{book.salesCount || 0} ejemplares</td>
                       <td className="px-6 py-3.5 text-right">
                         <button
-                          onClick={() => withdrawBook(b.id)}
+                          onClick={() => withdrawBook(book.id)}
                           className="px-3 py-1.5 text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg text-xs font-semibold transition-colors"
                           title="Retirar de la venta por incumplimiento"
                         >
@@ -232,7 +233,6 @@ export const AdminDashboard: React.FC = () => {
               </table>
             </div>
           </div>
-
         </div>
       )}
 
@@ -240,9 +240,7 @@ export const AdminDashboard: React.FC = () => {
         <div className="space-y-6">
           <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden">
             <div className="p-5 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-900">
-                Denuncias Comunitarias Recibidas
-              </h3>
+              <h3 className="text-base font-bold text-slate-900">Denuncias Comunitarias Recibidas</h3>
               <p className="text-xs text-slate-500">
                 Reportes enviados por compradores sobre libros o reseñas sospechosas
               </p>
@@ -260,9 +258,13 @@ export const AdminDashboard: React.FC = () => {
                   <div key={report.id} className="p-5 space-y-3 hover:bg-slate-50/60 transition-colors">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                          report.targetType === 'book' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'
-                        }`}>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            report.targetType === 'book'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-indigo-100 text-indigo-800'
+                          }`}
+                        >
                           Denuncia sobre {report.targetType === 'book' ? 'Libro' : 'Reseña'}
                         </span>
                         <span className="text-xs font-bold text-slate-900">{report.targetTitle}</span>
@@ -305,9 +307,7 @@ export const AdminDashboard: React.FC = () => {
       {activeTab === 'users' && (
         <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden">
           <div className="p-5 border-b border-slate-100">
-            <h3 className="text-base font-bold text-slate-900">
-              Gestión y Control de Usuarios
-            </h3>
+            <h3 className="text-base font-bold text-slate-900">Gestión y Control de Usuarios</h3>
             <p className="text-xs text-slate-500">
               Permite bloquear y desbloquear usuarios registrando el motivo de la acción.
             </p>
@@ -325,44 +325,50 @@ export const AdminDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {users.map(u => (
-                  <tr key={u.id} className="hover:bg-slate-50/60 transition-colors">
+                {users.map(user => (
+                  <tr key={user.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <img
-                          src={u.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80'}
-                          alt={u.displayName}
+                          src={
+                            user.photoURL ||
+                            'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80'
+                          }
+                          alt={user.displayName}
                           className="w-8 h-8 rounded-full object-cover"
                         />
                         <div>
-                          <p className="font-bold text-slate-900">{u.displayName}</p>
-                          <p className="text-slate-400 text-[11px]">{u.email}</p>
+                          <p className="font-bold text-slate-900">{user.displayName}</p>
+                          <p className="text-slate-400 text-[11px]">{user.email}</p>
                         </div>
                       </div>
                     </td>
 
                     <td className="px-6 py-4">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                        u.role === 'admin' ? 'bg-red-100 text-red-800' :
-                        u.role === 'seller' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-800'
-                      }`}>
-                        {u.role === 'admin' ? 'Administrador' : u.role === 'seller' ? 'Vendedor' : 'Comprador'}
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          user.role === 'admin'
+                            ? 'bg-red-100 text-red-800'
+                            : user.role === 'seller'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-slate-100 text-slate-800'
+                        }`}
+                      >
+                        {user.role === 'admin' ? 'Administrador' : user.role === 'seller' ? 'Vendedor' : 'Comprador'}
                       </span>
                     </td>
 
-                    <td className="px-6 py-4 text-slate-500">
-                      {u.location || 'Latinoamérica'}
-                    </td>
+                    <td className="px-6 py-4 text-slate-500">{user.location || 'Latinoamérica'}</td>
 
                     <td className="px-6 py-4">
-                      {u.isBlocked ? (
+                      {user.isBlocked ? (
                         <div className="space-y-0.5">
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800">
                             <Ban className="w-3 h-3 text-rose-600" />
                             <span>Bloqueado</span>
                           </span>
-                          {u.blockReason && (
-                            <p className="text-[10px] text-rose-600 truncate max-w-xs">{u.blockReason}</p>
+                          {user.blockReason && (
+                            <p className="text-[10px] text-rose-600 truncate max-w-xs">{user.blockReason}</p>
                           )}
                         </div>
                       ) : (
@@ -374,10 +380,10 @@ export const AdminDashboard: React.FC = () => {
                     </td>
 
                     <td className="px-6 py-4 text-right">
-                      {u.role !== 'admin' && (
-                        u.isBlocked ? (
+                      {user.role !== 'admin' &&
+                        (user.isBlocked ? (
                           <button
-                            onClick={() => toggleBlockUser(u.id)}
+                            onClick={() => toggleBlockUser(user.id)}
                             className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-colors"
                           >
                             Desbloquear
@@ -385,15 +391,14 @@ export const AdminDashboard: React.FC = () => {
                         ) : (
                           <button
                             onClick={() => {
-                              setBlockingUserId(u.id);
+                              setBlockingUserId(user.id);
                               setBlockReason('Infracción a las condiciones de servicio y calidad.');
                             }}
                             className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors"
                           >
                             Bloquear Usuario
                           </button>
-                        )
-                      )}
+                        ))}
                     </td>
                   </tr>
                 ))}
@@ -414,7 +419,7 @@ export const AdminDashboard: React.FC = () => {
               rows={3}
               required
               value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
+              onChange={event => setRejectionReason(event.target.value)}
               className="w-full p-3 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-rose-500"
             />
             <div className="flex justify-end gap-2">
@@ -447,7 +452,7 @@ export const AdminDashboard: React.FC = () => {
               rows={3}
               required
               value={blockReason}
-              onChange={(e) => setBlockReason(e.target.value)}
+              onChange={event => setBlockReason(event.target.value)}
               className="w-full p-3 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-rose-500"
             />
             <div className="flex justify-end gap-2">
@@ -468,7 +473,6 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
-
     </div>
   );
 };

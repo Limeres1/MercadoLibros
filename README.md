@@ -16,12 +16,12 @@ cp .env.example .env.local   # completar las variables VITE_FIREBASE_* (Firebase
 npm run dev                  # http://localhost:3000
 ```
 
-| Script | Qué hace |
-|---|---|
-| `npm run dev` | servidor de desarrollo |
-| `npm run build` | build de producción en `dist/` |
-| `npm run lint` | chequeo de tipos (TypeScript, sin variables sin usar) |
-| `npm test` | tests con Vitest |
+| Script          | Qué hace                                              |
+| --------------- | ----------------------------------------------------- |
+| `npm run dev`   | servidor de desarrollo                                |
+| `npm run build` | build de producción en `dist/`                        |
+| `npm run lint`  | chequeo de tipos (TypeScript, sin variables sin usar) |
+| `npm test`      | tests con Vitest                                      |
 
 ## Estructura
 
@@ -47,8 +47,13 @@ Cada módulo expone su estado con un Provider + hook (`useBooks`, `useCart`, `us
 
 ## Convenciones
 
+- Imports siempre absolutos con `@/` (ej. `@/constants/routes`); los relativos están prohibidos por ESLint. El orden y la separación en grupos (librerías → `@/` → estilos) los aplica `npm run format`.
+- Nombres descriptivos: nada de variables de una letra (`book`, `event`, `review`…), ESLint lo marca.
+- IDs nuevos con `createId()` (`@/lib/ids`); los IDs compuestos de Firestore con `docIds` (`@/constants/firestore`).
+- VS Code: instalar las extensiones recomendadas (Prettier y ESLint); se formatea al guardar.
 - Rutas: nunca strings sueltos. Se declaran en `src/constants/routes.ts` y se usan `ROUTES.library`, `paths.book(id)`.
-- Claves de `localStorage` en `src/constants/storageKeys.ts`.
+- Claves de `localStorage` en `src/constants/storageKeys.ts`; colecciones de Firestore en `src/constants/firestore.ts` y acceso con `firestoreRefs` (`src/services/firestore.ts`).
+- Estados y valores permitidos sólo desde `src/constants/statuses.ts`.
 - Páginas protegidas con `<RequireRole roles={[...]}>` en `src/app/App.tsx`.
 - Modales con `components/ui/Modal` (cierra con Esc y clic afuera).
 - Sin comentarios en el código.

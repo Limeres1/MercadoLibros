@@ -1,10 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router';
-import { Heart, Trash2, ShoppingBag } from 'lucide-react';
-import { ROUTES, paths } from '../../../constants/routes';
-import { useCart } from '../../shop/CartProvider';
-import { useBooks } from '../BooksProvider';
-import { useFavorites } from './FavoritesProvider';
+import { Heart, ShoppingBag, Trash2 } from 'lucide-react';
+
+import { paths, ROUTES } from '@/constants/routes';
+import { useBooks } from '@/features/catalog/BooksProvider';
+import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
+import { useCart } from '@/features/shop/CartProvider';
 
 export const FavoritesPage: React.FC = () => {
   const { books } = useBooks();
@@ -12,20 +13,17 @@ export const FavoritesPage: React.FC = () => {
   const { addToCart } = useCart();
   const navigate = useNavigate();
 
-  const favoriteBooks = books.filter(b => favorites.includes(b.id));
+  const favoriteBooks = books.filter(book => favorites.includes(book.id));
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="p-2 rounded-xl bg-rose-100 text-rose-600">
               <Heart className="w-5 h-5 fill-rose-500" />
             </span>
-            <h1 className="text-2xl font-black text-slate-900">
-              Mi Lista de Favoritos
-            </h1>
+            <h1 className="text-2xl font-black text-slate-900">Mi Lista de Favoritos</h1>
           </div>
           <p className="text-xs text-slate-500">
             Libros que has guardado para consultar, comparar o comprar más adelante.
@@ -53,7 +51,7 @@ export const FavoritesPage: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {favoriteBooks.map((book) => (
+          {favoriteBooks.map(book => (
             <div
               key={book.id}
               className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg transition-all flex flex-col justify-between overflow-hidden"
@@ -65,7 +63,7 @@ export const FavoritesPage: React.FC = () => {
                   onClick={() => navigate(paths.book(book.id))}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
-                
+
                 <button
                   onClick={() => toggleFavorite(book.id)}
                   className="absolute top-3 right-3 p-2 bg-white/90 hover:bg-white text-rose-500 rounded-full shadow-md backdrop-blur-xs transition-colors"
@@ -101,7 +99,6 @@ export const FavoritesPage: React.FC = () => {
           ))}
         </div>
       )}
-
     </div>
   );
 };
