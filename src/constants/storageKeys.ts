@@ -1,8 +1,6 @@
 const PREFIX = 'mercadolibros_v2_';
 
 export const STORAGE_KEYS = {
-  users: `${PREFIX}users`,
-  session: `${PREFIX}session`,
   books: `${PREFIX}books`,
   bookContents: `${PREFIX}book_contents`,
   reviews: `${PREFIX}reviews`,

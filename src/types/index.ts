@@ -7,10 +7,12 @@ import {
   READER_THEMES,
   REPORT_STATUSES,
   REPORT_TARGET_TYPES,
+  SIGNUP_ROLES,
 } from '@/constants/statuses';
 
 export type AccountRole = (typeof ACCOUNT_ROLES)[number];
 export type UserRole = AccountRole | 'visitor';
+export type SignupRole = (typeof SIGNUP_ROLES)[number];
 export type BookCondition = (typeof BOOK_CONDITIONS)[number];
 export type BookStatus = (typeof BOOK_STATUSES)[number];
 export type OrderStatus = (typeof ORDER_STATUSES)[number];

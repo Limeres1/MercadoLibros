@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
+const GEMINI_TIMEOUT_MS = 20_000;
 const DEFAULT_MODEL = 'gemini-3.8-flash';
 const FALLBACK_MODEL = 'gemini-3.6-flash';
 const RETRYABLE_STATUSES = [429, 500, 503];
@@ -76,7 +77,10 @@ export async function POST(request: Request): Promise<Response> {
   const body = parseBody(await request.json().catch(() => null));
   if (!body) return jsonResponse({ error: AI_ERRORS.invalidRequest }, 400);
 
-  const gemini = new GoogleGenAI({ apiKey });
+  const gemini = new GoogleGenAI({
+    apiKey,
+    httpOptions: { timeout: GEMINI_TIMEOUT_MS, retryOptions: { attempts: 1 } },
+  });
   const models = [...new Set([process.env.GEMINI_MODEL || DEFAULT_MODEL, FALLBACK_MODEL])];
   for (const model of models) {
     try {
@@ -91,7 +95,8 @@ export async function POST(request: Request): Promise<Response> {
       if (response.text) return jsonResponse({ text: response.text });
     } catch (error) {
       console.error(`Gemini request failed (${model})`, error);
-      if (!RETRYABLE_STATUSES.includes((error as { status?: number }).status ?? 0)) break;
+      const status = (error as { status?: number }).status;
+      if (status && !RETRYABLE_STATUSES.includes(status)) break;
     }
   }
   return jsonResponse({ error: AI_ERRORS.unavailable }, 502);

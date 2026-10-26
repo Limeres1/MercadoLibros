@@ -24,21 +24,6 @@ import { BarcodeScannerModal } from '@/features/catalog/BarcodeScannerModal';
 import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
 import { useReports } from '@/features/catalog/reports/ReportsProvider';
 import { useCart } from '@/features/shop/CartProvider';
-import { UserRole } from '@/types';
-
-const DEMO_ROLES: { role: UserRole; label: string }[] = [
-  { role: 'visitor', label: 'Visitante' },
-  { role: 'buyer', label: 'Comprador' },
-  { role: 'seller', label: 'Vendedor' },
-  { role: 'admin', label: 'Admin' },
-];
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  admin: '🛡️ Administrador',
-  seller: '💼 Vendedor Registrado',
-  buyer: '🛍️ Comprador Registrado',
-  visitor: '👤 Visitante (No registrado)',
-};
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 relative ${
@@ -48,7 +33,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 const menuItemClass = 'w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2.5';
 
 export const Navbar: React.FC = () => {
-  const { currentUser, currentRole, logoutUser, switchDemoRole } = useSession();
+  const { currentUser, currentRole, logoutUser } = useSession();
   const { openAuth } = useAuthModal();
   const { favorites } = useFavorites();
   const { reports } = useReports();
@@ -84,33 +69,6 @@ export const Navbar: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
-      <div className="bg-slate-900 text-slate-200 text-xs px-4 py-1.5 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800">
-        <div className="flex items-center gap-2">
-          <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true"></span>
-          <span className="font-medium text-slate-400">Modo de simulación:</span>
-          <span className="bg-slate-800 px-2 py-0.5 rounded text-amber-300 font-semibold uppercase tracking-wider text-[10px]">
-            {ROLE_LABELS[currentRole]}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <span className="text-slate-400 hidden sm:inline text-[11px]">Cambiar rol de prueba:</span>
-          <div className="inline-flex rounded-md shadow-xs bg-slate-800 p-0.5">
-            {DEMO_ROLES.map(({ role, label }) => (
-              <button
-                key={role}
-                onClick={() => switchDemoRole(role)}
-                className={`px-2 py-0.5 text-xs rounded transition-all ${
-                  currentRole === role ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-300 hover:text-white'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-2 sm:gap-3">
           <Link to={ROUTES.home} className="flex items-center gap-2.5 group shrink-0">
