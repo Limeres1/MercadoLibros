@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
+import { FcGoogle } from 'react-icons/fc';
 import { KeyRound, Lock, LogIn, Mail, ShoppingBag, Store, User, UserPlus, X } from 'lucide-react';
 
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { useAuthModal } from '@/features/auth/AuthModalProvider';
 import { useSession } from '@/features/auth/SessionProvider';
-import { UserRole } from '@/types';
+import { SignupRole } from '@/types';
 
 export const AuthModal: React.FC = () => {
   const { isAuthOpen } = useAuthModal();
@@ -14,13 +15,13 @@ export const AuthModal: React.FC = () => {
 
 const AuthDialog: React.FC = () => {
   const { authTab: authModalTab, setAuthTab: setAuthModalTab, closeAuth } = useAuthModal();
-  const { loginWithEmail, registerWithEmail, sendPasswordReset, switchDemoRole } = useSession();
+  const { loginWithEmail, loginWithGoogle, registerWithEmail, sendPasswordReset } = useSession();
   const { showToast } = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [selectedRole, setSelectedRole] = useState<UserRole>('buyer');
+  const [selectedRole, setSelectedRole] = useState<SignupRole>('buyer');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLogin = async (event: React.FormEvent) => {
@@ -42,6 +43,12 @@ const AuthDialog: React.FC = () => {
     }
     setIsSubmitting(true);
     await registerWithEmail(email, password, displayName, selectedRole);
+    setIsSubmitting(false);
+  };
+
+  const handleGoogle = async () => {
+    setIsSubmitting(true);
+    await loginWithGoogle(authModalTab === 'register' ? selectedRole : 'buyer');
     setIsSubmitting(false);
   };
 
@@ -98,6 +105,7 @@ const AuthDialog: React.FC = () => {
                 <Mail className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="email"
+                  autoComplete="email"
                   required
                   value={email}
                   onChange={event => setEmail(event.target.value)}
@@ -125,6 +133,7 @@ const AuthDialog: React.FC = () => {
                   required
                   value={password}
                   onChange={event => setPassword(event.target.value)}
+                  autoComplete="current-password"
                   placeholder="••••••••"
                   className="w-full pl-9 p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-amber-500"
                 />
@@ -185,6 +194,7 @@ const AuthDialog: React.FC = () => {
                   required
                   value={displayName}
                   onChange={event => setDisplayName(event.target.value)}
+                  autoComplete="name"
                   placeholder="Ej: Laura Pérez"
                   className="w-full pl-9 p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-amber-500"
                 />
@@ -197,6 +207,7 @@ const AuthDialog: React.FC = () => {
                 <Mail className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="email"
+                  autoComplete="email"
                   required
                   value={email}
                   onChange={event => setEmail(event.target.value)}
@@ -216,6 +227,7 @@ const AuthDialog: React.FC = () => {
                   minLength={6}
                   value={password}
                   onChange={event => setPassword(event.target.value)}
+                  autoComplete="new-password"
                   placeholder="Mínimo 6 caracteres"
                   className="w-full pl-9 p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-amber-500"
                 />
@@ -250,6 +262,7 @@ const AuthDialog: React.FC = () => {
                 <Mail className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="email"
+                  autoComplete="email"
                   required
                   value={email}
                   onChange={event => setEmail(event.target.value)}
@@ -278,48 +291,23 @@ const AuthDialog: React.FC = () => {
           </form>
         )}
 
-        <div className="pt-4 border-t border-slate-100 space-y-2">
-          <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 text-center">
-            Acceso Rápido con Cuentas Demo
-          </p>
-          <div className="grid grid-cols-3 gap-2">
+        {authModalTab !== 'forgot' && (
+          <div className="pt-4 border-t border-slate-100">
             <button
               type="button"
-              onClick={() => {
-                switchDemoRole('buyer');
-                closeAuth();
-              }}
-              className="p-2 bg-slate-50 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-xl text-center transition-colors"
+              onClick={handleGoogle}
+              disabled={isSubmitting}
+              className="w-full py-2.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center justify-center gap-2 transition-colors"
             >
-              <span className="block font-bold text-[11px] text-slate-800">Comprador</span>
-              <span className="text-[9px] text-slate-400">Sofía Ramos</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                switchDemoRole('seller');
-                closeAuth();
-              }}
-              className="p-2 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-xl text-center transition-colors"
-            >
-              <span className="block font-bold text-[11px] text-slate-800">Vendedor</span>
-              <span className="text-[9px] text-slate-400">Librería Atenea</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                switchDemoRole('admin');
-                closeAuth();
-              }}
-              className="p-2 bg-slate-50 hover:bg-red-50 border border-slate-200 hover:border-red-300 rounded-xl text-center transition-colors"
-            >
-              <span className="block font-bold text-[11px] text-slate-800">Admin</span>
-              <span className="text-[9px] text-slate-400">Joaquín Limeres</span>
+              <FcGoogle className="w-4 h-4" aria-hidden="true" />
+              <span>
+                {authModalTab === 'register'
+                  ? `Registrarme con Google como ${selectedRole === 'seller' ? 'Vendedor' : 'Comprador'}`
+                  : 'Continuar con Google'}
+              </span>
             </button>
           </div>
-        </div>
+        )}
       </div>
     </Modal>
   );

@@ -1,5 +1,7 @@
 export const ACCOUNT_ROLES = ['buyer', 'seller', 'admin'] as const;
 
+export const SIGNUP_ROLES = ['buyer', 'seller'] as const;
+
 export const BOOK_CONDITIONS = ['digital', 'nuevo', 'usado'] as const;
 
 export const BOOK_STATUSES = ['draft', 'pending_review', 'published', 'rejected', 'withdrawn'] as const;

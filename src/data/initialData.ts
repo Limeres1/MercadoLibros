@@ -3,8 +3,8 @@ import { Book, BookContent, LibraryItem, Order, Report, Review, UserProfile } fr
 export const INITIAL_USERS: UserProfile[] = [
   {
     id: 'user_admin_1',
-    email: 'joacolimeres@gmail.com',
-    displayName: 'Joaquín Limeres (Admin)',
+    email: 'admin@mercadolibros.com',
+    displayName: 'Administración Mercado Libros',
     role: 'admin',
     photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
     bio: 'Administrador general y moderador principal de Mercado Libros.',

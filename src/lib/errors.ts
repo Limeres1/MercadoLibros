@@ -2,6 +2,11 @@ const FIREBASE_MESSAGES: Record<string, string> = {
   'auth/invalid-credential': 'Email o contraseña incorrectos.',
   'auth/wrong-password': 'Email o contraseña incorrectos.',
   'auth/user-not-found': 'Email o contraseña incorrectos.',
+  'auth/user-disabled': 'Tu cuenta está deshabilitada.',
+  'auth/popup-blocked':
+    'El navegador bloqueó la ventana de Google. Permití las ventanas emergentes e intentá de nuevo.',
+  'auth/cancelled-popup-request': 'Se cerró la ventana antes de terminar el inicio de sesión.',
+  'auth/operation-not-allowed': 'Este método de inicio de sesión no está habilitado.',
   'auth/invalid-email': 'El email no tiene un formato válido.',
   'auth/email-already-in-use': 'Ya existe una cuenta con ese email.',
   'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',

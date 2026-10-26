@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { Lock, ShieldX } from 'lucide-react';
 
 import { EmptyState } from '@/components/ui/EmptyState';
+import { PageLoader } from '@/components/ui/PageLoader';
 import { ROUTES } from '@/constants/routes';
 import { useAuthModal } from '@/features/auth/AuthModalProvider';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -14,8 +15,10 @@ interface RequireRoleProps {
 }
 
 export const RequireRole: React.FC<RequireRoleProps> = ({ roles, children }) => {
-  const { currentUser } = useSession();
+  const { currentUser, isAuthLoading } = useSession();
   const { openAuth } = useAuthModal();
+
+  if (isAuthLoading) return <PageLoader />;
 
   if (!currentUser) {
     return (

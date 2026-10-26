@@ -49,8 +49,9 @@ export function useModeration() {
   const toggleBlockUser = async (userId: string, reason?: string) => {
     const user = users.find(candidate => candidate.id === userId);
     if (!user) return;
-    setUserBlocked(userId, !user.isBlocked, reason);
-    showToast('Estado del usuario actualizado con éxito.', 'success');
+    if (await setUserBlocked(userId, !user.isBlocked, reason)) {
+      showToast('Estado del usuario actualizado con éxito.', 'success');
+    }
   };
 
   return { approveBook, rejectBook, withdrawBook, resolveReport, toggleBlockUser };

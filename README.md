@@ -16,12 +16,29 @@ cp .env.example .env.local   # completar VITE_FIREBASE_* (Firebase → Configura
 npm run dev                  # http://localhost:3000, incluye /api/ai
 ```
 
-| Script          | Qué hace                                              |
-| --------------- | ----------------------------------------------------- |
-| `npm run dev`   | servidor de desarrollo                                |
-| `npm run build` | build de producción en `dist/`                        |
-| `npm run lint`  | chequeo de tipos (TypeScript, sin variables sin usar) |
-| `npm test`      | tests con Vitest                                      |
+| Script          | Qué hace                                                 |
+| --------------- | -------------------------------------------------------- |
+| `npm run dev`   | servidor de desarrollo                                   |
+| `npm run build` | build de producción en `dist/`                           |
+| `npm run lint`  | chequeo de tipos (TypeScript, sin variables sin usar)    |
+| `npm test`      | tests con Vitest                                         |
+| `npm run seed`  | crea las cuentas demo y los libros iniciales en Firebase |
+
+## Cuentas demo
+
+`npm run seed` crea (o actualiza) en Firebase Auth las cuentas demo con UID fijos y carga en Firestore sus perfiles, los libros y los contenidos iniciales. Necesita en `.env.local`:
+
+- `GOOGLE_APPLICATION_CREDENTIALS`: ruta al JSON de la cuenta de servicio (Firebase → Configuración → Cuentas de servicio → Generar clave). No se sube al repo.
+- `SEED_DEMO_PASSWORD`: contraseña común de las cuentas demo.
+
+| Rol       | Email                               |
+| --------- | ----------------------------------- |
+| Admin     | `admin@mercadolibros.com`           |
+| Vendedor  | `libreria.atenea@mercadolibros.com` |
+| Vendedor  | `libros.antiguos@mercadolibros.com` |
+| Comprador | `sofia.lectora@mercadolibros.com`   |
+
+El rol admin sólo se asigna desde la semilla o desde Firestore; en el registro se elige comprador o vendedor. Las reglas de `firestore.rules` se publican con `npx firebase-tools deploy --only firestore:rules`.
 
 ## Estructura
 

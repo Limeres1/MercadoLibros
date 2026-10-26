@@ -1,167 +1,221 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  onAuthStateChanged,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
+  updateProfile,
+  User,
 } from 'firebase/auth';
+import { deleteField, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 
 import { useToast } from '@/components/ui/Toast';
-import { FAVORITE_SHOWCASE_LIMIT } from '@/constants/statuses';
-import { STORAGE_KEYS } from '@/constants/storageKeys';
-import { INITIAL_USERS } from '@/data/initialData';
+import { FAVORITE_SHOWCASE_LIMIT, SIGNUP_ROLES } from '@/constants/statuses';
 import { useAuthModal } from '@/features/auth/AuthModalProvider';
-import { usePersistentState } from '@/hooks/usePersistentState';
 import { createSafeContext } from '@/lib/createSafeContext';
-import { createId } from '@/lib/ids';
+import { getErrorMessage } from '@/lib/errors';
+import { withoutUndefined } from '@/lib/firestoreData';
 import { auth } from '@/services/firebase';
-import { UserProfile, UserRole } from '@/types';
+import { firestoreRefs } from '@/services/firestore';
+import { SignupRole, UserProfile, UserRole } from '@/types';
+
+type EditableProfile = Pick<UserProfile, 'displayName' | 'photoURL' | 'bio' | 'location' | 'phone'>;
 
 interface SessionContextValue {
   currentUser: UserProfile | null;
   currentRole: UserRole;
+  isAuthLoading: boolean;
   users: UserProfile[];
   loginWithEmail: (email: string, pass: string) => Promise<boolean>;
-  registerWithEmail: (email: string, pass: string, name: string, role: UserRole) => Promise<boolean>;
+  loginWithGoogle: (role: SignupRole) => Promise<boolean>;
+  registerWithEmail: (email: string, pass: string, name: string, role: SignupRole) => Promise<boolean>;
   logoutUser: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<boolean>;
-  switchDemoRole: (role: UserRole) => void;
-  updateUserProfile: (data: Partial<UserProfile>) => Promise<void>;
+  updateUserProfile: (data: Partial<EditableProfile>) => Promise<void>;
   updateFavoriteBookIds: (bookIds: string[]) => Promise<void>;
-  setUserBlocked: (userId: string, blocked: boolean, reason?: string) => void;
+  setUserBlocked: (userId: string, blocked: boolean, reason?: string) => Promise<boolean>;
 }
 
 const [Provider, useSession] = createSafeContext<SessionContextValue>('useSession');
 export { useSession };
 
+const DEFAULT_BLOCK_REASON = 'Incumplimiento de términos';
+
+const buildProfile = (user: User, displayName: string, role: SignupRole): UserProfile => ({
+  id: user.uid,
+  email: user.email ?? '',
+  displayName,
+  role: SIGNUP_ROLES.includes(role) ? role : 'buyer',
+  photoURL: user.photoURL ?? undefined,
+  bio: role === 'seller' ? 'Vendedor de libros en Mercado Libros' : 'Comprador y lector en Mercado Libros',
+  favoriteBookIds: [],
+  isBlocked: false,
+  createdAt: new Date().toISOString(),
+});
+
 export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { showToast } = useToast();
   const { closeAuth } = useAuthModal();
-  const [users, setUsers] = usePersistentState<UserProfile[]>(STORAGE_KEYS.users, INITIAL_USERS);
-  const [currentUserId, setCurrentUserId] = usePersistentState<string | null>(STORAGE_KEYS.session, null);
+  const [authUid, setAuthUid] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const showToastRef = useRef(showToast);
 
-  const currentUser = users.find(user => user.id === currentUserId) ?? null;
-  const currentRole: UserRole = currentUser ? currentUser.role : 'visitor';
+  useEffect(() => {
+    showToastRef.current = showToast;
+  });
 
-  const switchDemoRole = (role: UserRole) => {
-    if (role === 'visitor') {
-      setCurrentUserId(null);
-      showToast('Has cambiado al modo Visitante (No registrado).', 'info');
+  useEffect(
+    () =>
+      onAuthStateChanged(auth, user => {
+        setAuthUid(user?.uid ?? null);
+        if (!user) {
+          setCurrentUser(null);
+          setIsAuthLoading(false);
+        }
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    if (!authUid) return;
+    setIsAuthLoading(true);
+    return onSnapshot(
+      firestoreRefs.user(authUid),
+      snapshot => {
+        const profile = snapshot.exists() ? snapshot.data() : null;
+        if (profile?.isBlocked) {
+          showToastRef.current(
+            `Tu cuenta fue bloqueada. Motivo: ${profile.blockReason || DEFAULT_BLOCK_REASON}`,
+            'error',
+          );
+          setCurrentUser(null);
+          signOut(auth).catch(() => undefined);
+        } else {
+          setCurrentUser(profile);
+        }
+        setIsAuthLoading(false);
+      },
+      error => {
+        showToastRef.current(getErrorMessage(error), 'error');
+        setCurrentUser(null);
+        setIsAuthLoading(false);
+      },
+    );
+  }, [authUid]);
+
+  const isAdmin = currentUser?.role === 'admin';
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setUsers([]);
       return;
     }
-    const user = users.find(candidate => candidate.role === role);
-    if (!user) return;
-    setCurrentUserId(user.id);
-    showToast(`Sesión cambiada a ${user.displayName}`, 'success');
-  };
+    return onSnapshot(firestoreRefs.users(), snapshot => setUsers(snapshot.docs.map(userDoc => userDoc.data())));
+  }, [isAdmin]);
 
-  const loginWithEmail = async (email: string, pass: string): Promise<boolean> => {
-    const foundUser = users.find(user => user.email.toLowerCase() === email.toLowerCase());
-    if (foundUser) {
-      if (foundUser.isBlocked) {
-        showToast(
-          `Tu cuenta ha sido bloqueada. Motivo: ${foundUser.blockReason || 'Incumplimiento de términos'}`,
-          'error',
-        );
-        return false;
-      }
-      setCurrentUserId(foundUser.id);
-      closeAuth();
-      showToast(`¡Bienvenido de vuelta, ${foundUser.displayName}!`, 'success');
-      return true;
-    }
+  const currentRole: UserRole = currentUser ? currentUser.role : 'visitor';
 
-    let profile: UserProfile;
-    try {
-      const { user } = await signInWithEmailAndPassword(auth, email, pass);
-      profile = {
-        id: user.uid,
-        email: user.email || email,
-        displayName: user.displayName || email.split('@')[0],
-        role: 'buyer',
-        createdAt: new Date().toISOString(),
-        favoriteBookIds: [],
-      };
-    } catch {
-      profile = {
-        id: createId(),
-        email,
-        displayName: email.split('@')[0],
-        role: 'buyer',
-        createdAt: new Date().toISOString(),
-        favoriteBookIds: [],
-      };
+  const finishLogin = async (user: User, role: SignupRole, displayName?: string): Promise<boolean> => {
+    const profileRef = firestoreRefs.user(user.uid);
+    const snapshot = await getDoc(profileRef);
+    let profile = snapshot.exists() ? snapshot.data() : null;
+    if (!profile) {
+      profile = buildProfile(user, displayName || user.displayName || user.email?.split('@')[0] || 'Lector', role);
+      await setDoc(profileRef, profile);
     }
-    setUsers(prev => [...prev.filter(user => user.id !== profile.id), profile]);
-    setCurrentUserId(profile.id);
+    if (profile.isBlocked) return false;
     closeAuth();
     showToast(`¡Bienvenido, ${profile.displayName}!`, 'success');
     return true;
   };
 
-  const registerWithEmail = async (email: string, pass: string, name: string, role: UserRole): Promise<boolean> => {
-    const uid = await createUserWithEmailAndPassword(auth, email, pass)
-      .then(cred => cred.user.uid)
-      .catch(() => createId());
+  const loginWithEmail = async (email: string, pass: string): Promise<boolean> => {
+    try {
+      const { user } = await signInWithEmailAndPassword(auth, email, pass);
+      return await finishLogin(user, 'buyer');
+    } catch (error) {
+      showToast(getErrorMessage(error), 'error');
+      return false;
+    }
+  };
 
-    const newUser: UserProfile = {
-      id: uid,
-      email,
-      displayName: name,
-      role: role === 'seller' ? 'seller' : 'buyer',
-      bio: `Usuario registrado como ${role === 'seller' ? 'Vendedor de libros' : 'Comprador y lector'}`,
-      favoriteBookIds: [],
-      createdAt: new Date().toISOString(),
-      isBlocked: false,
-    };
+  const loginWithGoogle = async (role: SignupRole): Promise<boolean> => {
+    try {
+      const { user } = await signInWithPopup(auth, new GoogleAuthProvider());
+      return await finishLogin(user, role);
+    } catch (error) {
+      showToast(getErrorMessage(error), 'error');
+      return false;
+    }
+  };
 
-    setUsers(prev => [...prev, newUser]);
-    setCurrentUserId(newUser.id);
-    closeAuth();
-    showToast(`¡Cuenta de ${newUser.role === 'seller' ? 'Vendedor' : 'Comprador'} creada exitosamente!`, 'success');
-    return true;
+  const registerWithEmail = async (email: string, pass: string, name: string, role: SignupRole): Promise<boolean> => {
+    try {
+      const { user } = await createUserWithEmailAndPassword(auth, email, pass);
+      await updateProfile(user, { displayName: name });
+      return await finishLogin(user, role, name);
+    } catch (error) {
+      showToast(getErrorMessage(error), 'error');
+      return false;
+    }
   };
 
   const logoutUser = async () => {
     await signOut(auth).catch(() => undefined);
-    setCurrentUserId(null);
     showToast('Sesión cerrada correctamente.', 'info');
   };
 
   const sendPasswordReset = async (email: string): Promise<boolean> => {
-    await sendPasswordResetEmail(auth, email).catch(() => undefined);
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (error) {
+      if ((error as { code?: string }).code === 'auth/invalid-email') {
+        showToast(getErrorMessage(error), 'error');
+        return false;
+      }
+    }
     showToast(`Si existe una cuenta con ${email}, te enviamos un correo para restablecer la contraseña.`, 'info');
     return true;
   };
 
-  const updateUserProfile = async (data: Partial<UserProfile>) => {
+  const updateUserProfile = async (data: Partial<EditableProfile>) => {
     if (!currentUser) return;
-    setUsers(prev => prev.map(user => (user.id === currentUser.id ? { ...user, ...data } : user)));
-    showToast('Perfil actualizado con éxito.', 'success');
+    try {
+      await updateDoc(firestoreRefs.user(currentUser.id), withoutUndefined(data));
+      showToast('Perfil actualizado con éxito.', 'success');
+    } catch (error) {
+      showToast(getErrorMessage(error), 'error');
+    }
   };
 
   const updateFavoriteBookIds = async (bookIds: string[]) => {
     if (!currentUser) return;
-    setUsers(prev =>
-      prev.map(user =>
-        user.id === currentUser.id ? { ...user, favoriteBookIds: bookIds.slice(0, FAVORITE_SHOWCASE_LIMIT) } : user,
-      ),
-    );
-    showToast('Tus libros favoritos del perfil han sido actualizados.', 'success');
+    try {
+      await updateDoc(firestoreRefs.user(currentUser.id), {
+        favoriteBookIds: bookIds.slice(0, FAVORITE_SHOWCASE_LIMIT),
+      });
+      showToast('Tus libros favoritos del perfil han sido actualizados.', 'success');
+    } catch (error) {
+      showToast(getErrorMessage(error), 'error');
+    }
   };
 
-  const setUserBlocked = (userId: string, blocked: boolean, reason?: string) => {
-    setUsers(prev =>
-      prev.map(user =>
-        user.id === userId
-          ? {
-              ...user,
-              isBlocked: blocked,
-              blockReason: blocked ? reason || 'Infracción de normas comunitarias' : undefined,
-            }
-          : user,
-      ),
-    );
+  const setUserBlocked = async (userId: string, blocked: boolean, reason?: string): Promise<boolean> => {
+    try {
+      await updateDoc(firestoreRefs.user(userId), {
+        isBlocked: blocked,
+        blockReason: blocked ? reason || 'Infracción de normas comunitarias' : deleteField(),
+      });
+      return true;
+    } catch (error) {
+      showToast(getErrorMessage(error), 'error');
+      return false;
+    }
   };
 
   return (
@@ -169,12 +223,13 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       value={{
         currentUser,
         currentRole,
+        isAuthLoading,
         users,
         loginWithEmail,
+        loginWithGoogle,
         registerWithEmail,
         logoutUser,
         sendPasswordReset,
-        switchDemoRole,
         updateUserProfile,
         updateFavoriteBookIds,
         setUserBlocked,
