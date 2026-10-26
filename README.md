@@ -12,8 +12,8 @@ React 19 · TypeScript · Vite · Tailwind CSS 4 · React Router 7 · Firebase (
 
 ```bash
 npm install
-cp .env.example .env.local   # completar las variables VITE_FIREBASE_* (Firebase → Configuración del proyecto)
-npm run dev                  # http://localhost:3000
+cp .env.example .env.local   # completar VITE_FIREBASE_* (Firebase → Configuración del proyecto) y GEMINI_API_KEY
+npm run dev                  # http://localhost:3000, incluye /api/ai
 ```
 
 | Script          | Qué hace                                              |
@@ -41,6 +41,8 @@ src/
     seller/       panel y formulario del vendedor                     (Zona D)
     admin/        moderación y usuarios                               (Zona D)
   hooks/  lib/  services/firebase.ts  types/  data/
+api/
+  ai.ts           función serverless de Vercel que consulta a Gemini
 ```
 
 Cada módulo expone su estado con un Provider + hook (`useBooks`, `useCart`, `useLibrary`, `useReviews`…). Hoy guardan datos de ejemplo en `localStorage`; cada zona reemplaza la implementación de **su** Provider por Firestore sin cambiar la interfaz que usan las pantallas.
@@ -57,6 +59,43 @@ Cada módulo expone su estado con un Provider + hook (`useBooks`, `useCart`, `us
 - Páginas protegidas con `<RequireRole roles={[...]}>` en `src/app/App.tsx`.
 - Modales con `components/ui/Modal` (cierra con Esc y clic afuera).
 - Sin comentarios en el código.
+
+## IA con Gemini
+
+El navegador nunca ve la API key: el front llama a `/api/ai` (función de Vercel en `api/ai.ts`) y la función consulta a Gemini con `GEMINI_API_KEY`. Sólo responde a usuarios con sesión de Firebase y hasta 10 consultas por minuto por usuario. En local, `npm run dev` sirve la misma función tomando la key de `.env.local`; en Vercel se carga en Settings → Environment Variables. `GEMINI_MODEL` es opcional (por defecto `gemini-3.8-flash`); si el modelo está saturado se reintenta con `gemini-3.6-flash`.
+
+Desde cualquier pantalla se usa el hook `useAI()`:
+
+```tsx
+import { useAI } from '@/hooks/useAI';
+
+const BookSummary: React.FC<{ book: Book }> = ({ book }) => {
+  const { ask, isLoading, error } = useAI();
+  const [summary, setSummary] = useState<string | null>(null);
+
+  const summarize = async () => {
+    const text = await ask({
+      systemInstruction: 'Sos un librero. Respondé en español, en 3 oraciones.',
+      prompt: `Resumí "${book.title}" de ${book.author}: ${book.description}`,
+    });
+    if (text) setSummary(text);
+  };
+
+  return (
+    <>
+      <button onClick={summarize} disabled={isLoading}>
+        {isLoading ? 'Pensando…' : 'Resumir con IA'}
+      </button>
+      {error && <p className="text-red-600">{error}</p>}
+      {summary && <p>{summary}</p>}
+    </>
+  );
+};
+```
+
+- `ask({ prompt, systemInstruction?, json? })` devuelve el texto o `null` si falló; en ese caso `error` trae un mensaje listo para mostrar (sin sesión, límite de consultas, IA caída, sin conexión).
+- Con `json: true` Gemini responde JSON; pedir el formato en el prompt y hacer `JSON.parse(text)`.
+- La app sigue funcionando aunque la IA falle: mostrar `error` y no bloquear la pantalla.
 
 ## Flujo de trabajo
 

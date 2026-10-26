@@ -24,7 +24,7 @@ export default tseslint.config(
       'simple-import-sort/imports': [
         'error',
         {
-          groups: [['^\\u0000'], ['^react', '^@?\\w'], ['^@/'], ['^.+\\.s?css$']],
+          groups: [['^\\u0000'], ['^react', '^@?\\w'], ['^@/', '^@api/'], ['^.+\\.s?css$']],
         },
       ],
       'simple-import-sort/exports': 'error',
@@ -35,6 +35,10 @@ export default tseslint.config(
       'id-length': ['error', { min: 2, properties: 'never' }],
       '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true }],
     },
+  },
+  {
+    files: ['api/**/*.ts', 'vite.config.ts'],
+    languageOptions: { globals: globals.node },
   },
   prettier,
 );
