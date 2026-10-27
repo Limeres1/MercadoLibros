@@ -1,11 +1,10 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { Buffer } from 'node:buffer';
+import { existsSync } from 'node:fs';
 import path from 'path';
 import { loadEnv, type Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
-
-const API_FUNCTIONS = { '/api/ai': '/api/ai.ts' };
 
 function apiDevServer(): Plugin {
   return {
@@ -17,8 +16,9 @@ function apiDevServer(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const pathname = req.url?.split('?')[0] ?? '';
-        const modulePath = API_FUNCTIONS[pathname as keyof typeof API_FUNCTIONS];
-        if (!modulePath) return next();
+        const modulePath = `${pathname}.ts`;
+        if (!/^\/api(\/[a-z][\w-]*)+$/.test(pathname) || !existsSync(path.join(process.cwd(), modulePath)))
+          return next();
 
         const chunks: Buffer[] = [];
         for await (const chunk of req) chunks.push(chunk);
@@ -41,6 +41,9 @@ function apiDevServer(): Plugin {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), apiDevServer()],
+  optimizeDeps: {
+    include: ['leaflet'],
+  },
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, 'src'),
@@ -48,6 +51,7 @@ export default defineConfig({
     },
   },
   build: {
+    chunkSizeWarningLimit: 600,
     rolldownOptions: {
       output: {
         codeSplitting: {
@@ -76,7 +80,7 @@ export default defineConfig({
         test: {
           name: 'rules',
           environment: 'node',
-          include: ['tests/rules/**/*.test.ts'],
+          include: ['tests/**/*.test.ts'],
           fileParallelism: false,
         },
       },

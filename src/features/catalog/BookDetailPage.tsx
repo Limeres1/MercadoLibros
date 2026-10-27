@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import {
+  BookCheck,
   BookOpen,
   BookX,
   Check,
@@ -21,6 +22,7 @@ import { CATALOG_PARAMS, paths, ROUTES } from '@/constants/routes';
 import { BOOK_CONDITION_LABELS } from '@/constants/statuses';
 import { useSession } from '@/features/auth/SessionProvider';
 import { useRequireLogin } from '@/features/auth/useRequireLogin';
+import { BookFormat } from '@/features/catalog/BookCard';
 import { useBook } from '@/features/catalog/BooksProvider';
 import { isOutOfStock } from '@/features/catalog/catalogFilters';
 import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
@@ -28,6 +30,7 @@ import { ReportModal } from '@/features/catalog/reports/ReportModal';
 import { ReportTarget } from '@/features/catalog/reports/ReportsProvider';
 import { BookReviews } from '@/features/catalog/reviews/BookReviews';
 import { SampleReaderModal } from '@/features/catalog/SampleReaderModal';
+import { useLibrary } from '@/features/reader/LibraryProvider';
 import { getMaxQuantity, useCart } from '@/features/shop/CartProvider';
 import { formatPrice, formatRating } from '@/lib/format';
 import { Book } from '@/types';
@@ -79,6 +82,9 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
 
   const isFav = isFavorite(book.id);
   const soldOut = isOutOfStock(book);
+  const { hasPurchased } = useLibrary();
+  const isOwned = hasPurchased(book.id);
+  const canRead = isOwned && book.condition === 'digital';
   const cartQuantity = getCartQuantity(book.id);
   const maxQuantity = getMaxQuantity(book);
   const statusNotice = STATUS_NOTICES[book.status];
@@ -166,6 +172,7 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
           <header>
             <h1 className="font-serif text-3xl font-bold leading-tight text-slate-900 sm:text-4xl">{book.title}</h1>
             <p className="mt-2 text-lg text-slate-600">{book.author}</p>
+            <BookFormat book={book} className="mt-2 text-sm" />
             <p className="mt-3 flex items-center gap-1.5 text-sm text-slate-600">
               {book.reviewCount > 0 ? (
                 <>
@@ -183,6 +190,13 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
 
           <div className="rounded-xl border border-slate-200 bg-white p-5">
             <p className="text-3xl font-extrabold tabular-nums text-slate-900">{formatPrice(book.price)}</p>
+            {isOwned && (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                <BookCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                {canRead ? 'Ya está en tu biblioteca' : 'Ya compraste este libro'}
+              </p>
+            )}
+
             <p className="mt-1 text-sm text-slate-600">
               {book.condition === 'digital'
                 ? 'Libro digital: después del pago lo leés en tu biblioteca.'
@@ -193,7 +207,15 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
                     }.`}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              {cartQuantity === 0 ? (
+              {canRead ? (
+                <Link
+                  to={paths.reader(book.id)}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700 sm:flex-none"
+                >
+                  <BookOpen className="h-4 w-4" aria-hidden="true" />
+                  Leer ahora
+                </Link>
+              ) : cartQuantity === 0 ? (
                 <button
                   type="button"
                   onClick={() => addToCart(book)}

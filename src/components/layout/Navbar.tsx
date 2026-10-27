@@ -33,7 +33,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 const menuItemClass = 'w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2.5';
 
 export const Navbar: React.FC = () => {
-  const { currentUser, currentRole, isAuthLoading, logoutUser } = useSession();
+  const { displayUser: currentUser, displayRole: currentRole, isAuthLoading, logoutUser } = useSession();
   const { openAuth } = useAuthModal();
   const { favorites } = useFavorites();
   const { reports } = useReports();
@@ -282,10 +282,7 @@ export const Navbar: React.FC = () => {
                 )}
               </div>
             ) : isAuthLoading ? (
-              <div role="status" className="flex h-9 w-9 items-center sm:w-28">
-                <span className="h-9 w-full animate-pulse rounded-full bg-slate-200/80" aria-hidden="true" />
-                <span className="sr-only">Cargando tu sesión…</span>
-              </div>
+              <span className="h-9 w-9 sm:w-24" aria-hidden="true" />
             ) : (
               <button
                 onClick={() => openAuth('login')}

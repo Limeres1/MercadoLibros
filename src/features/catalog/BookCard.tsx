@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router';
-import { Check, Heart, ShoppingBag, Star } from 'lucide-react';
+import { BookCheck, BookOpen, Check, Heart, ShoppingBag, Star, TabletSmartphone, Truck } from 'lucide-react';
 
 import { paths } from '@/constants/routes';
 import { BOOK_CONDITION_LABELS } from '@/constants/statuses';
@@ -8,15 +8,23 @@ import { isOutOfStock } from '@/features/catalog/catalogFilters';
 import { formatPrice, formatRating } from '@/lib/format';
 import { Book } from '@/types';
 
-const CONDITION_STYLES: Record<Book['condition'], string> = {
-  digital: 'bg-indigo-600',
-  nuevo: 'bg-emerald-600',
-  usado: 'bg-amber-700',
-};
+export const BookFormat: React.FC<{ book: Book; className?: string }> = ({ book, className = '' }) =>
+  book.condition === 'digital' ? (
+    <p className={`flex items-center gap-1.5 font-medium text-indigo-700 ${className}`}>
+      <TabletSmartphone className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      Digital · se lee al instante
+    </p>
+  ) : (
+    <p className={`flex items-center gap-1.5 font-medium text-slate-700 ${className}`}>
+      <Truck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      {BOOK_CONDITION_LABELS[book.condition]} · envío a domicilio
+    </p>
+  );
 
 interface BookCardProps {
   book: Book;
   cartQuantity: number;
+  isOwned: boolean;
   isFavorite: boolean;
   onToggleFavorite: (book: Book) => void;
   onAddToCart: (book: Book) => void;
@@ -25,11 +33,13 @@ interface BookCardProps {
 export const BookCard: React.FC<BookCardProps> = ({
   book,
   cartQuantity,
+  isOwned,
   isFavorite,
   onToggleFavorite,
   onAddToCart,
 }) => {
   const soldOut = isOutOfStock(book);
+  const canRead = isOwned && book.condition === 'digital';
 
   return (
     <article className="group relative flex w-full flex-col">
@@ -42,11 +52,14 @@ export const BookCard: React.FC<BookCardProps> = ({
           aria-hidden="true"
           className="absolute inset-y-0 left-0 w-2.5 bg-gradient-to-r from-black/30 via-black/10 to-transparent"
         />
-        <span
-          className={`absolute bottom-2 left-3 rounded px-1.5 py-0.5 text-[11px] font-semibold text-white ${CONDITION_STYLES[book.condition]}`}
-        >
-          {BOOK_CONDITION_LABELS[book.condition]}
-        </span>
+        {isOwned && (
+          <span
+            className={`absolute left-3 flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow ${soldOut ? 'top-8' : 'top-2'}`}
+          >
+            <BookCheck className="h-3.5 w-3.5" aria-hidden="true" />
+            {book.condition === 'digital' ? 'En tu biblioteca' : 'Ya lo compraste'}
+          </span>
+        )}
         {soldOut && (
           <span className="absolute inset-x-0 top-0 bg-slate-900/80 py-1 text-center text-xs font-semibold text-white">
             Sin stock
@@ -73,6 +86,7 @@ export const BookCard: React.FC<BookCardProps> = ({
           </Link>
         </h3>
         <p className="mt-0.5 line-clamp-1 text-sm text-slate-500">{book.author}</p>
+        <BookFormat book={book} className="mt-1.5 text-xs" />
 
         <p className="mt-1.5 flex items-center gap-1 text-xs text-slate-500">
           {book.reviewCount > 0 ? (
@@ -88,24 +102,35 @@ export const BookCard: React.FC<BookCardProps> = ({
 
         <div className="mt-auto flex items-center justify-between gap-2 pt-3">
           <span className="text-lg font-extrabold tabular-nums text-slate-900">{formatPrice(book.price)}</span>
-          <button
-            type="button"
-            onClick={() => onAddToCart(book)}
-            disabled={soldOut}
-            aria-label={`Agregar ${book.title} al carrito`}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-white ${
-              cartQuantity > 0
-                ? 'border border-emerald-600 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                : 'bg-amber-600 text-white hover:bg-amber-700'
-            }`}
-          >
-            {cartQuantity > 0 ? (
-              <Check className="h-3.5 w-3.5" aria-hidden="true" />
-            ) : (
-              <ShoppingBag className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-            <span>{cartQuantity > 0 ? `En carrito (${cartQuantity})` : 'Agregar'}</span>
-          </button>
+          {canRead ? (
+            <Link
+              to={paths.reader(book.id)}
+              aria-label={`Leer ${book.title}`}
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+            >
+              <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+              Leer
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onAddToCart(book)}
+              disabled={soldOut}
+              aria-label={`Agregar ${book.title} al carrito`}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-white ${
+                cartQuantity > 0
+                  ? 'border border-emerald-600 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                  : 'bg-amber-600 text-white hover:bg-amber-700'
+              }`}
+            >
+              {cartQuantity > 0 ? (
+                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <ShoppingBag className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              <span>{cartQuantity > 0 ? `En carrito (${cartQuantity})` : 'Agregar'}</span>
+            </button>
+          )}
         </div>
       </div>
     </article>

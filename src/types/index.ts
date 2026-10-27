@@ -119,7 +119,10 @@ export interface Order {
   totalAmount: number;
   paymentMethod: string;
   paymentId?: string;
+  preferenceId?: string;
+  checkoutUrl?: string;
   shippingAddress?: string;
+  shippingLocation?: { lat: number; lng: number };
   status: OrderStatus;
   createdAt: string;
   paidAt?: string;

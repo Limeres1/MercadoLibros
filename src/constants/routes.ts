@@ -10,6 +10,7 @@ export const ROUTES = {
   profile: '/perfil',
   seller: '/vendedor',
   admin: '/admin',
+  paymentSimulation: '/pago/simulado',
   notFound: '*',
 } as const;
 
@@ -25,6 +26,8 @@ export const CATALOG_PARAMS = {
 
 export const SEARCH_PARAM = CATALOG_PARAMS.search;
 
+export const ORDER_PARAM = 'orden';
+
 export type CatalogParam = (typeof CATALOG_PARAMS)[keyof typeof CATALOG_PARAMS];
 
 export const paths = {
@@ -36,4 +39,5 @@ export const paths = {
   },
   book: (bookId: string) => generatePath(ROUTES.book, { bookId }),
   reader: (bookId: string) => generatePath(ROUTES.reader, { bookId }),
+  order: (orderId: string) => `${ROUTES.orders}?${new URLSearchParams({ [ORDER_PARAM]: orderId })}`,
 };

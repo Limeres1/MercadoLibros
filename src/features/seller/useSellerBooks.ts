@@ -23,7 +23,8 @@ export function useSellerBooks() {
             ? 'draft'
             : existing.status;
       if (!(await updateBook(existing.id, { ...bookData, status }))) return;
-      if (bookData.condition === 'digital' && contentText !== undefined) saveBookContent(existing.id, contentText);
+      if (bookData.condition === 'digital' && contentText !== undefined)
+        await saveBookContent(existing.id, contentText);
       showToast(submitForReview ? 'Libro enviado a revisión del administrador.' : 'Borrador actualizado.', 'success');
       return;
     }
@@ -58,7 +59,7 @@ export function useSellerBooks() {
       updatedAt: now,
     });
     if (!created) return;
-    if (condition === 'digital') saveBookContent(id, contentText || '');
+    if (condition === 'digital') await saveBookContent(id, contentText || '');
     showToast(
       submitForReview ? '¡Libro enviado para revisión del Administrador!' : 'Guardado como borrador.',
       'success',

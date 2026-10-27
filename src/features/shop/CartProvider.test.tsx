@@ -23,6 +23,7 @@ const fake = vi.hoisted(() => {
     emit,
     session: { currentUser: null as unknown },
     liveBooks: [] as Book[],
+    owned: [] as string[],
   };
 });
 
@@ -63,6 +64,9 @@ vi.mock('firebase/firestore', () => ({
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ showToast }) }));
 vi.mock('@/features/auth/SessionProvider', () => ({ useSession: () => fake.session }));
 vi.mock('@/features/auth/useRequireLogin', () => ({ useRequireLogin: () => () => fake.session.currentUser }));
+vi.mock('@/features/reader/LibraryProvider', () => ({
+  useLibrary: () => ({ hasPurchased: (id: string) => fake.owned.includes(id) }),
+}));
 vi.mock('@/features/catalog/BooksProvider', () => ({
   useBooks: () => ({
     getBook: (id: string) => fake.liveBooks.find(book => book.id === id),
@@ -96,6 +100,7 @@ describe('CartProvider', () => {
     Object.keys(fake.carts).forEach(uid => delete fake.carts[uid]);
     fake.session.currentUser = INITIAL_USERS[2];
     fake.liveBooks = [physicalBook, digitalBook];
+    fake.owned = [];
     showToast.mockClear();
   });
 
@@ -113,6 +118,13 @@ describe('CartProvider', () => {
     await add(digitalBook);
     expect(await add(digitalBook)).toBe(false);
     expect(cart.getCartQuantity(digitalBook.id)).toBe(1);
+  });
+
+  it('does not add a digital book the user already owns', async () => {
+    fake.owned = [digitalBook.id];
+    renderCart();
+    expect(await add(digitalBook)).toBe(false);
+    expect(showToast).toHaveBeenLastCalledWith(expect.stringContaining('ya está en tu biblioteca'), 'info');
   });
 
   it('keeps a separate cart for each user and empties it on logout', async () => {

@@ -11,6 +11,7 @@ import { countActiveFilters, readCatalogFilters } from '@/features/catalog/catal
 import { CatalogFiltersPanel } from '@/features/catalog/CatalogFiltersPanel';
 import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
 import { useCatalogBooks, useCatalogPriceCeiling } from '@/features/catalog/useCatalogBooks';
+import { useLibrary } from '@/features/reader/LibraryProvider';
 import { useCart } from '@/features/shop/CartProvider';
 import { formatPrice } from '@/lib/format';
 
@@ -19,6 +20,7 @@ const SKELETON_COUNT = 4;
 export const CatalogPage: React.FC = () => {
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addToCart, getCartQuantity } = useCart();
+  const { hasPurchased } = useLibrary();
   const [searchParams, setSearchParams] = useSearchParams();
   const [areFiltersOpen, setAreFiltersOpen] = useState(false);
 
@@ -227,6 +229,7 @@ export const CatalogPage: React.FC = () => {
                   <BookCard
                     book={book}
                     cartQuantity={getCartQuantity(book.id)}
+                    isOwned={hasPurchased(book.id)}
                     isFavorite={isFavorite(book.id)}
                     onToggleFavorite={favoriteBook => toggleFavorite(favoriteBook.id)}
                     onAddToCart={addToCart}

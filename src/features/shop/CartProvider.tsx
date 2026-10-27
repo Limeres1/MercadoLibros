@@ -6,6 +6,7 @@ import { MAX_CART_QUANTITY } from '@/constants/statuses';
 import { useSession } from '@/features/auth/SessionProvider';
 import { useRequireLogin } from '@/features/auth/useRequireLogin';
 import { useBooks } from '@/features/catalog/BooksProvider';
+import { useLibrary } from '@/features/reader/LibraryProvider';
 import { createSafeContext } from '@/lib/createSafeContext';
 import { getErrorMessage } from '@/lib/errors';
 import { db } from '@/services/firebase';
@@ -49,6 +50,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { showToast } = useToast();
   const showToastRef = useRef(showToast);
   const { getBook, watchBooks } = useBooks();
+  const { hasPurchased } = useLibrary();
   const [entries, setEntries] = useState<CartEntry[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const userId = currentUser?.id;
@@ -99,6 +101,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return false;
     }
     const currentBook = getBook(book.id) ?? book;
+    if (currentBook.condition === 'digital' && hasPurchased(book.id)) {
+      showToast(`"${book.title}" ya está en tu biblioteca.`, 'info');
+      return false;
+    }
     const existing = entries.find(entry => entry.bookId === book.id);
     const nextQuantity = (existing?.quantity ?? 0) + 1;
     if (nextQuantity > getMaxQuantity(currentBook)) {

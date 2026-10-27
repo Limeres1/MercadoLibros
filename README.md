@@ -45,6 +45,20 @@ El catálogo no descarga todos los libros: pide a Firestore páginas de 24 (`use
 
 Para mostrar libros sueltos (ficha, lector, favoritos, biblioteca, carrito) se usan `useBook(id)` y `useBooksByIds(ids)`, que leen sólo esos documentos.
 
+## Pagos (Mercado Pago)
+
+El navegador nunca marca un pedido como pagado: el carrito se lee en el servidor y todo el circuito pasa por funciones de Vercel en `api/`.
+
+1. `POST /api/checkout` valida el carrito (libros publicados, stock, digitales no comprados, dirección para impresos), crea el pedido `pending` y la preferencia de Mercado Pago (Checkout Pro). Devuelve el link de pago.
+2. Mercado Pago avisa a `POST /api/payments/webhook`; la función consulta el pago en la API de Mercado Pago y, si está aprobado, en una sola transacción marca el pedido `paid`, descuenta stock, suma ventas, agrega los digitales a la biblioteca, registra las compras y vacía esos libros del carrito. Repetir el aviso no duplica nada; un pago rechazado deja el pedido `rejected`.
+3. Mientras el usuario tenga un pedido de Mercado Pago pendiente, la app llama sola a `POST /api/payments/sync` (al volver a la pestaña y cada 5 segundos), que busca el pago por `external_reference`. Así el pedido se confirma aunque el webhook no llegue (en `localhost` Mercado Pago no permite webhook ni retorno automático: `auto_return` exige una URL https).
+
+En el checkout se elige el medio de pago (tarjeta, dinero en cuenta o efectivo en Rapipago/Pago Fácil); la preferencia excluye los demás tipos (`PAYMENT_OPTIONS` en `src/constants/payments.ts`).
+
+Variables del servidor: `MP_ACCESS_TOKEN` (Access Token **de prueba** de una aplicación de Mercado Pago), `MP_CURRENCY` (por defecto `ARS`) y `FIREBASE_SERVICE_ACCOUNT` (JSON de la cuenta de servicio en una línea; en local alcanza con `GOOGLE_APPLICATION_CREDENTIALS`). Para pagar en el sandbox, en el checkout entrar con una **cuenta de prueba de comprador** de Mercado Pago.
+
+Sin `MP_ACCESS_TOKEN` el checkout lleva a `/pago/simulado`, donde se aprueba o rechaza el pago con los mismos estados (plan B para demos). La lógica de pedidos se prueba contra el emulador en `tests/server/`.
+
 ## Reglas de Firestore
 
 `firestore.rules` define quién lee y escribe cada colección; los tests están en `tests/rules/` y corren contra el emulador con `npm run test:rules` (necesita Java 21: `brew install openjdk@21`). Se publican con `npx firebase deploy --only firestore:rules`.

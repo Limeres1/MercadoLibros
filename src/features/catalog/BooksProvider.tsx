@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   deleteField,
   documentId,
+  getDoc,
   getDocs,
   onSnapshot,
   query,
@@ -12,15 +13,12 @@ import {
 } from 'firebase/firestore';
 
 import { useToast } from '@/components/ui/Toast';
-import { STORAGE_KEYS } from '@/constants/storageKeys';
-import { INITIAL_BOOK_CONTENTS } from '@/data/initialData';
 import { useSession } from '@/features/auth/SessionProvider';
-import { usePersistentState } from '@/hooks/usePersistentState';
 import { createSafeContext } from '@/lib/createSafeContext';
 import { getErrorMessage } from '@/lib/errors';
 import { buildSearchTokens } from '@/lib/searchTokens';
 import { firestoreRefs } from '@/services/firestore';
-import { Book, BookContent } from '@/types';
+import { Book } from '@/types';
 
 const IN_QUERY_LIMIT = 30;
 
@@ -33,8 +31,8 @@ interface BooksContextValue {
   watchBooks: (ids: string[]) => () => void;
   addBook: (book: Book) => Promise<boolean>;
   updateBook: (id: string, patch: Partial<Book>) => Promise<boolean>;
-  getBookContent: (bookId: string) => BookContent | undefined;
-  saveBookContent: (bookId: string, text: string) => void;
+  loadBookContent: (bookId: string) => Promise<string | null>;
+  saveBookContent: (bookId: string, text: string) => Promise<boolean>;
 }
 
 const [Provider, useBooks] = createSafeContext<BooksContextValue>('useBooks');
@@ -65,7 +63,6 @@ export const BooksProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const cacheRef = useRef(cache);
   const [managedBooks, setManagedBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [contents, setContents] = usePersistentState<BookContent[]>(STORAGE_KEYS.bookContents, INITIAL_BOOK_CONTENTS);
 
   const userId = currentUser?.id;
   const isAdmin = currentUser?.role === 'admin';
@@ -163,19 +160,24 @@ export const BooksProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  const getBookContent = useCallback(
-    (bookId: string) => contents.find(content => content.bookId === bookId),
-    [contents],
+  const loadBookContent = useCallback(
+    (bookId: string) =>
+      getDoc(firestoreRefs.bookContent(bookId))
+        .then(snapshot => (snapshot.exists() ? snapshot.data().text : null))
+        .catch(() => null),
+    [],
   );
 
-  const saveBookContent = useCallback(
-    (bookId: string, text: string) =>
-      setContents(prev => [
-        ...prev.filter(content => content.bookId !== bookId),
-        { bookId, text, updatedAt: new Date().toISOString() },
-      ]),
-    [setContents],
-  );
+  const saveBookContent = useCallback(async (bookId: string, text: string) => {
+    if (!text.trim()) return true;
+    try {
+      await setDoc(firestoreRefs.bookContent(bookId), { bookId, text, updatedAt: new Date().toISOString() });
+      return true;
+    } catch (error) {
+      showToastRef.current(getErrorMessage(error), 'error');
+      return false;
+    }
+  }, []);
 
   return (
     <Provider
@@ -188,7 +190,7 @@ export const BooksProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         watchBooks,
         addBook,
         updateBook,
-        getBookContent,
+        loadBookContent,
         saveBookContent,
       }}
     >
@@ -233,4 +235,20 @@ export function useBooksByIds(ids: string[]) {
 
   const books = useMemo(() => ids.map(id => getBook(id)).filter((book): book is Book => Boolean(book)), [ids, getBook]);
   return { books, isLoading };
+}
+
+export function useBookContent(bookId: string) {
+  const { loadBookContent } = useBooks();
+  const [content, setContent] = useState<{ bookId: string; text: string | null } | null>(null);
+
+  useEffect(() => {
+    let isActive = true;
+    loadBookContent(bookId).then(text => isActive && setContent({ bookId, text }));
+    return () => {
+      isActive = false;
+    };
+  }, [bookId, loadBookContent]);
+
+  const isCurrent = content?.bookId === bookId;
+  return { text: isCurrent ? content.text : null, isLoading: !isCurrent };
 }
