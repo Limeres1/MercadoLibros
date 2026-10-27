@@ -16,13 +16,14 @@ cp .env.example .env.local   # completar VITE_FIREBASE_* (Firebase → Configura
 npm run dev                  # http://localhost:3000, incluye /api/ai
 ```
 
-| Script          | Qué hace                                                 |
-| --------------- | -------------------------------------------------------- |
-| `npm run dev`   | servidor de desarrollo                                   |
-| `npm run build` | build de producción en `dist/`                           |
-| `npm run lint`  | chequeo de tipos (TypeScript, sin variables sin usar)    |
-| `npm test`      | tests con Vitest                                         |
-| `npm run seed`  | crea las cuentas demo y los libros iniciales en Firebase |
+| Script               | Qué hace                                                     |
+| -------------------- | ------------------------------------------------------------ |
+| `npm run dev`        | servidor de desarrollo                                       |
+| `npm run build`      | build de producción en `dist/`                               |
+| `npm run lint`       | chequeo de tipos (TypeScript, sin variables sin usar)        |
+| `npm test`           | tests con Vitest                                             |
+| `npm run test:rules` | tests de `firestore.rules` en el emulador (requiere Java 21) |
+| `npm run seed`       | crea las cuentas demo y los libros iniciales en Firebase     |
 
 ## Cuentas demo
 
@@ -38,7 +39,19 @@ npm run dev                  # http://localhost:3000, incluye /api/ai
 | Vendedor  | `libros.antiguos@mercadolibros.com` |
 | Comprador | `sofia.lectora@mercadolibros.com`   |
 
-El rol admin sólo se asigna desde la semilla o desde Firestore; en el registro se elige comprador o vendedor. Las reglas de `firestore.rules` se publican con `npx firebase-tools deploy --only firestore:rules`.
+El rol admin sólo se asigna desde la semilla o desde Firestore; en el registro se elige comprador o vendedor. ## Reglas de Firestore
+
+`firestore.rules` define quién lee y escribe cada colección; los tests están en `tests/rules/` y corren contra el emulador con `npm run test:rules` (necesita Java 21: `brew install openjdk@21`). Se publican con `npx firebase deploy --only firestore:rules`.
+
+- `users`: cada uno crea su perfil como comprador o vendedor; nadie cambia su propio `role`, `email` ni `isBlocked`.
+- `users/{uid}/favorites`, `cart`, `library`: sólo el dueño (y el admin para leer). La biblioteca no se crea desde el navegador: la escribe el flujo de pago con Admin SDK; el dueño sólo guarda `lastReadPage` y `bookmarks`.
+- `books`: los crea un vendedor activo, siempre como `draft`; el vendedor pasa a `pending_review` o `withdrawn`, sólo el admin publica o rechaza. `rating` y `reviewCount` se actualizan en el mismo batch que la reseña.
+- `bookContents`: el texto completo lo leen el vendedor, el admin y quien tiene el libro en su biblioteca.
+- `orders`: el comprador crea pedidos `pending` con `totalAmount = subtotal + shippingCost`; el pago (servidor) los marca `paid`.
+- `reviews`: sólo quien tiene el libro en su biblioteca, puntaje 1–5, id `docIds.review(bookId, userId)`.
+- `reports`: cualquier usuario activo denuncia; sólo el admin resuelve.
+- `auditLog`: sólo el admin escribe (con `logAdminAction` de `@/services/auditLog`) y nadie edita ni borra.
+- Usuarios bloqueados no pueden crear libros, pedidos, reseñas ni denuncias.
 
 ## Estructura
 

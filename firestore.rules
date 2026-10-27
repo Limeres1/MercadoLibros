@@ -1,88 +1,247 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default-deny catch-all
-    match /{document=**} {
-      allow read, write: if false;
-    }
 
-    // Helper functions
-    function isSignedIn() {
+    function signedIn() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function isSelf(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
     function isAdmin() {
-      return isSignedIn() && (
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin")
-      );
+      return hasProfile() && profile().role == 'admin';
     }
 
-    // USERS COLLECTION
+    function isActive() {
+      return hasProfile() && profile().get('isBlocked', false) == false;
+    }
+
+    function isActiveSeller() {
+      return isActive() && profile().role in ['seller', 'admin'];
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function changed() {
+      return incoming().diff(resource.data).affectedKeys();
+    }
+
+    function isText(value, minLength, maxLength) {
+      return value is string && value.size() >= minLength && value.size() <= maxLength;
+    }
+
+    function isOptionalText(data, field, maxLength) {
+      return !(field in data) || isText(data[field], 0, maxLength);
+    }
+
+    function isAmount(value) {
+      return value is number && value >= 0 && value <= 1000000;
+    }
+
+    function ownsLibraryBook(bookId) {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)/library/$(bookId));
+    }
+
+    function bookData(bookId) {
+      return get(/databases/$(database)/documents/books/$(bookId)).data;
+    }
+
+    function isValidProfile(data) {
+      return isText(data.displayName, 1, 80)
+        && isOptionalText(data, 'bio', 500)
+        && isOptionalText(data, 'location', 120)
+        && isOptionalText(data, 'phone', 40)
+        && isOptionalText(data, 'photoURL', 1000)
+        && (!('favoriteBookIds' in data) || (data.favoriteBookIds is list && data.favoriteBookIds.size() <= 4));
+    }
+
     match /users/{userId} {
+      allow read: if signedIn();
+      allow create: if isSelf(userId)
+        && incoming().role in ['buyer', 'seller']
+        && incoming().isBlocked == false
+        && incoming().email == request.auth.token.email
+        && !('password' in incoming())
+        && isValidProfile(incoming());
+      allow update: if isAdmin()
+        || (isSelf(userId)
+          && !changed().hasAny(['role', 'email', 'isBlocked', 'blockReason', 'createdAt'])
+          && isValidProfile(incoming()));
+      allow delete: if isAdmin();
+
+      match /favorites/{bookId} {
+        allow read: if isSelf(userId) || isAdmin();
+        allow create, update: if isSelf(userId) && incoming().keys().hasOnly(['createdAt']) && incoming().createdAt is string;
+        allow delete: if isSelf(userId);
+      }
+
+      match /cart/{bookId} {
+        allow read, delete: if isSelf(userId);
+        allow create, update: if isSelf(userId)
+          && incoming().keys().hasOnly(['quantity', 'addedAt'])
+          && incoming().quantity is int
+          && incoming().quantity >= 1
+          && incoming().quantity <= 10
+          && incoming().addedAt is string;
+      }
+
+      match /library/{bookId} {
+        allow read: if isSelf(userId) || isAdmin();
+        allow update: if isSelf(userId)
+          && changed().hasOnly(['lastReadPage', 'bookmarks'])
+          && incoming().lastReadPage is int
+          && incoming().lastReadPage >= 0
+          && incoming().lastReadPage <= incoming().totalPages
+          && incoming().bookmarks is list
+          && incoming().bookmarks.size() <= 100;
+        allow create, delete: if isAdmin();
+      }
+    }
+
+    function isValidBook(data) {
+      return isText(data.title, 1, 200)
+        && isText(data.author, 1, 120)
+        && isText(data.isbn, 0, 20)
+        && isText(data.description, 0, 5000)
+        && isAmount(data.price)
+        && data.condition in ['digital', 'nuevo', 'usado']
+        && isText(data.genre, 1, 60)
+        && isText(data.language, 1, 40)
+        && isText(data.coverUrl, 0, 1000)
+        && isText(data.sampleText, 0, 20000)
+        && isText(data.sellerName, 1, 120)
+        && data.pages is int && data.pages >= 0 && data.pages <= 10000
+        && data.publicationYear is int && data.publicationYear >= 0 && data.publicationYear <= 2100
+        && (!('stock' in data) || (data.stock is int && data.stock >= 0));
+    }
+
+    function hasReviewed(bookId) {
+      return exists(/databases/$(database)/documents/reviews/$(bookId + '_' + request.auth.uid))
+        || existsAfter(/databases/$(database)/documents/reviews/$(bookId + '_' + request.auth.uid));
+    }
+
+    function isRatingUpdate(bookId) {
+      return hasReviewed(bookId)
+        && changed().hasOnly(['rating', 'reviewCount'])
+        && incoming().rating is number
+        && incoming().rating >= 0
+        && incoming().rating <= 5
+        && incoming().reviewCount is int
+        && incoming().reviewCount >= 0
+        && (incoming().reviewCount - resource.data.reviewCount) * (incoming().reviewCount - resource.data.reviewCount) <= 1;
+    }
+
+    match /books/{bookId} {
+      allow read: if resource.data.status == 'published'
+        || (signedIn() && resource.data.sellerId == request.auth.uid)
+        || isAdmin();
+      allow create: if isActiveSeller()
+        && incoming().sellerId == request.auth.uid
+        && incoming().status == 'draft'
+        && incoming().rating == 0
+        && incoming().reviewCount == 0
+        && incoming().salesCount == 0
+        && isValidBook(incoming());
+      allow update: if isAdmin()
+        || (isActiveSeller()
+          && resource.data.sellerId == request.auth.uid
+          && !changed().hasAny(['sellerId', 'rating', 'reviewCount', 'salesCount', 'createdAt', 'rejectionReason'])
+          && incoming().status in ['draft', 'pending_review', 'withdrawn']
+          && isValidBook(incoming()))
+        || (isActive() && isRatingUpdate(bookId));
+      allow delete: if isAdmin() || (signedIn() && resource.data.sellerId == request.auth.uid && resource.data.status == 'draft');
+    }
+
+    match /bookContents/{bookId} {
+      allow read: if isAdmin()
+        || (signedIn() && (ownsLibraryBook(bookId) || bookData(bookId).sellerId == request.auth.uid));
+      allow write: if isAdmin()
+        || (isActiveSeller()
+          && bookData(bookId).sellerId == request.auth.uid
+          && (request.resource == null || isText(incoming().text, 1, 2000000)));
+    }
+
+    match /orders/{orderId} {
+      allow read: if isAdmin()
+        || (signedIn() && (resource.data.buyerId == request.auth.uid || request.auth.uid in resource.data.sellerIds));
+      allow create: if isActive()
+        && incoming().buyerId == request.auth.uid
+        && incoming().status == 'pending'
+        && !('paymentId' in incoming())
+        && !('paidAt' in incoming())
+        && incoming().items is list
+        && incoming().items.size() >= 1
+        && incoming().items.size() <= 50
+        && incoming().sellerIds is list
+        && isAmount(incoming().subtotal)
+        && isAmount(incoming().shippingCost)
+        && incoming().totalAmount == incoming().subtotal + incoming().shippingCost;
+      allow update: if isAdmin() && resource.data.status == 'pending' && incoming().status == 'rejected'
+        && changed().hasOnly(['status']);
+      allow delete: if false;
+    }
+
+    function isValidReview(reviewId) {
+      return reviewId == incoming().bookId + '_' + request.auth.uid
+        && incoming().userId == request.auth.uid
+        && incoming().rating is int
+        && incoming().rating >= 1
+        && incoming().rating <= 5
+        && isText(incoming().comment, 1, 2000)
+        && isText(incoming().userName, 1, 80);
+    }
+
+    match /reviews/{reviewId} {
       allow read: if true;
-      allow create: if isOwner(userId)
-        && request.resource.data.role in ['buyer', 'seller']
-        && request.resource.data.isBlocked == false
-        && !('password' in request.resource.data);
-      allow update: if isAdmin() || (isOwner(userId)
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'email', 'isBlocked', 'blockReason']));
+      allow create: if isActive() && isValidReview(reviewId) && ownsLibraryBook(incoming().bookId);
+      allow update: if isActive()
+        && resource.data.userId == request.auth.uid
+        && !changed().hasAny(['bookId', 'userId', 'createdAt'])
+        && isValidReview(reviewId);
+      allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.reporterId == request.auth.uid);
+      allow create: if isActive()
+        && incoming().reporterId == request.auth.uid
+        && reportId == request.auth.uid + '_' + incoming().targetType + '_' + incoming().targetId
+        && incoming().targetType in ['book', 'review']
+        && incoming().status == 'pending'
+        && isText(incoming().reason, 1, 200)
+        && isText(incoming().details, 0, 2000)
+        && !('resolvedBy' in incoming());
+      allow update: if isAdmin()
+        && changed().hasOnly(['status', 'adminNote', 'resolvedBy', 'resolvedAt'])
+        && incoming().status in ['resolved', 'dismissed']
+        && incoming().resolvedBy == request.auth.uid;
       allow delete: if isAdmin();
     }
 
-    // BOOKS COLLECTION
-    match /books/{bookId} {
-      // Visitors and users can read published books; authors and admins can read drafts/under review
-      allow read: if resource.data.status == "published" || 
-                     (isSignedIn() && (resource.data.sellerId == request.auth.uid || isAdmin()));
-      
-      // Registered sellers or admins can create books
-      allow create: if isSignedIn();
-      
-      // Seller owner or admin can update
-      allow update: if isSignedIn() && (resource.data.sellerId == request.auth.uid || isAdmin());
-      
-      // Admin or owner can delete
-      allow delete: if isSignedIn() && (resource.data.sellerId == request.auth.uid || isAdmin());
-    }
-
-    // ORDERS COLLECTION
-    match /orders/{orderId} {
-      allow read: if isSignedIn() && (resource.data.buyerId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && request.resource.data.buyerId == request.auth.uid;
-      allow update, delete: if isAdmin();
-    }
-
-    // LIBRARY COLLECTION (PERSONAL USER LIBRARY)
-    match /library/{libraryId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-    }
-
-    // REVIEWS COLLECTION
-    match /reviews/{reviewId} {
-      allow read: if true;
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-    }
-
-    // REPORTS COLLECTION
-    match /reports/{reportId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.reporterId == request.auth.uid);
-      allow create: if isSignedIn();
-      allow update, delete: if isAdmin();
-    }
-
-    // FAVORITES COLLECTION
-    match /favorites/{favId} {
-      allow read, write: if isSignedIn();
+    match /auditLog/{entryId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && incoming().adminId == request.auth.uid
+        && incoming().action in [
+          'approve_book', 'reject_book', 'withdraw_book', 'delete_review',
+          'resolve_report', 'dismiss_report', 'block_user', 'unblock_user'
+        ]
+        && incoming().targetType in ['book', 'review', 'user', 'report']
+        && isText(incoming().targetId, 1, 200)
+        && incoming().createdAt is string;
+      allow update, delete: if false;
     }
   }
 }
