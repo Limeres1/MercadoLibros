@@ -1,430 +1,310 @@
 import React, { useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import {
-  ArrowLeft,
   BookOpen,
   BookX,
-  Edit3,
-  Globe,
+  Check,
+  ChevronRight,
   Heart,
-  MessageSquarePlus,
+  Minus,
+  Plus,
+  Share2,
   ShieldAlert,
   ShoppingBag,
   Star,
-  Trash2,
-  User,
 } from 'lucide-react';
 
 import { EmptyState } from '@/components/ui/EmptyState';
+import { PageLoader } from '@/components/ui/PageLoader';
 import { useToast } from '@/components/ui/Toast';
+import { CATALOG_PARAMS, paths, ROUTES } from '@/constants/routes';
+import { BOOK_CONDITION_LABELS } from '@/constants/statuses';
 import { useSession } from '@/features/auth/SessionProvider';
 import { useRequireLogin } from '@/features/auth/useRequireLogin';
-import { useBooks } from '@/features/catalog/BooksProvider';
+import { useBook } from '@/features/catalog/BooksProvider';
+import { isOutOfStock } from '@/features/catalog/catalogFilters';
 import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
 import { ReportModal } from '@/features/catalog/reports/ReportModal';
 import { ReportTarget } from '@/features/catalog/reports/ReportsProvider';
-import { useReviews } from '@/features/catalog/reviews/ReviewsProvider';
+import { BookReviews } from '@/features/catalog/reviews/BookReviews';
 import { SampleReaderModal } from '@/features/catalog/SampleReaderModal';
-import { useCart } from '@/features/shop/CartProvider';
-import { Book, Review } from '@/types';
+import { getMaxQuantity, useCart } from '@/features/shop/CartProvider';
+import { formatPrice, formatRating } from '@/lib/format';
+import { Book } from '@/types';
+
+const STATUS_NOTICES: Partial<Record<Book['status'], string>> = {
+  draft: 'Borrador: sólo vos y la administración pueden ver esta ficha.',
+  pending_review: 'En revisión: todavía no aparece en el catálogo.',
+  rejected: 'Rechazado por la administración: no aparece en el catálogo.',
+  withdrawn: 'Retirado de la venta: no aparece en el catálogo.',
+};
 
 export const BookDetailPage: React.FC = () => {
   const { bookId } = useParams();
-  const { getBook } = useBooks();
+  const { book, isLoading } = useBook(bookId);
   const { currentUser } = useSession();
-  const book = bookId ? getBook(bookId) : undefined;
   const isVisible =
     book && (book.status === 'published' || currentUser?.role === 'admin' || book.sellerId === currentUser?.id);
+
+  if (isLoading && !book) return <PageLoader />;
 
   if (!book || !isVisible) {
     return (
       <EmptyState
         icon={BookX}
         title="Libro no encontrado"
-        description="El libro que buscás no existe o ya no está disponible."
+        description="El libro no existe o ya no está a la venta."
+        action={
+          <Link
+            to={ROUTES.home}
+            className="inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Ir al catálogo
+          </Link>
+        }
       />
     );
   }
 
-  return <BookDetail book={book} />;
+  return <BookDetail key={book.id} book={book} />;
 };
 
 const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
-  const navigate = useNavigate();
-  const { currentUser } = useSession();
   const requireLogin = useRequireLogin();
   const { showToast } = useToast();
-  const { addToCart } = useCart();
+  const { addToCart, getCartQuantity, updateCartQuantity, openCart } = useCart();
   const { isFavorite, toggleFavorite } = useFavorites();
-  const { reviews, addReview, editReview, removeReview } = useReviews();
-
-  const [newRating, setNewRating] = useState(5);
-  const [newComment, setNewComment] = useState('');
-  const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
-  const [editRating, setEditRating] = useState(5);
-  const [editComment, setEditComment] = useState('');
-  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isSampleOpen, setIsSampleOpen] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
 
   const isFav = isFavorite(book.id);
+  const soldOut = isOutOfStock(book);
+  const cartQuantity = getCartQuantity(book.id);
+  const maxQuantity = getMaxQuantity(book);
+  const statusNotice = STATUS_NOTICES[book.status];
 
   const openReport = (target: ReportTarget) => {
-    if (requireLogin('Debes iniciar sesión para enviar una denuncia.')) setReportTarget(target);
+    if (requireLogin('Iniciá sesión para denunciar contenido.')) setReportTarget(target);
   };
 
-  const bookReviews = reviews.filter(review => review.bookId === book.id);
-  const userExistingReview = currentUser ? bookReviews.find(review => review.userId === currentUser.id) : null;
-
-  const handleCreateReview = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!newComment.trim()) {
-      showToast('Por favor escribe tu opinión literaria.', 'error');
+  const shareBook = async () => {
+    const url = window.location.origin + paths.book(book.id);
+    if (navigator.share) {
+      await navigator
+        .share({ title: book.title, text: `${book.title}, de ${book.author}`, url })
+        .catch(() => undefined);
       return;
     }
-    setIsSubmittingReview(true);
-    await addReview(book.id, newRating, newComment.trim());
-    setNewComment('');
-    setIsSubmittingReview(false);
+    await navigator.clipboard
+      .writeText(url)
+      .then(() => showToast('Link copiado al portapapeles.', 'success'))
+      .catch(() => showToast('No pudimos copiar el link. Copialo desde la barra del navegador.', 'error'));
   };
 
-  const startEditReview = (rev: Review) => {
-    setEditingReviewId(rev.id);
-    setEditRating(rev.rating);
-    setEditComment(rev.comment);
-  };
-
-  const handleSaveEditedReview = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!editingReviewId || !editComment.trim()) return;
-    await editReview(editingReviewId, editRating, editComment.trim());
-    setEditingReviewId(null);
-  };
+  const details = [
+    { label: 'Autor', value: book.author },
+    { label: 'Género', value: book.genre },
+    { label: 'Idioma', value: book.language },
+    { label: 'Formato', value: BOOK_CONDITION_LABELS[book.condition] },
+    { label: 'Páginas', value: String(book.pages) },
+    { label: 'Año de publicación', value: String(book.publicationYear) },
+    { label: 'ISBN', value: book.isbn || 'Sin ISBN' },
+    { label: 'Vendedor', value: book.sellerName },
+  ];
 
   return (
-    <div className="animate-in fade-in duration-200">
-      <div className="relative w-full max-w-5xl mx-auto bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200/80 flex flex-col">
-        <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50/80">
-          <div className="flex items-center gap-2 min-w-0">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 -ml-2 text-slate-500 hover:text-slate-800 rounded-xl hover:bg-slate-100 transition-colors"
-              aria-label="Volver"
+    <div className="mx-auto max-w-5xl space-y-6">
+      <nav aria-label="Ruta de navegación">
+        <ol className="flex flex-wrap items-center gap-1 text-sm text-slate-500">
+          <li>
+            <Link to={ROUTES.home} className="hover:text-amber-700 hover:underline">
+              Catálogo
+            </Link>
+          </li>
+          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          <li>
+            <Link
+              to={paths.catalog({ [CATALOG_PARAMS.genre]: book.genre })}
+              className="hover:text-amber-700 hover:underline"
             >
-              <ArrowLeft className="w-5 h-5" aria-hidden="true" />
-            </button>
-            <span className="text-xs text-slate-500 truncate">ISBN: {book.isbn}</span>
-          </div>
+              {book.genre}
+            </Link>
+          </li>
+          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          <li aria-current="page" className="line-clamp-1 max-w-[16rem] text-slate-700">
+            {book.title}
+          </li>
+        </ol>
+      </nav>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => openReport({ type: 'book', id: book.id, title: book.title })}
-              className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1 text-xs"
-              title="Denunciar este libro"
-            >
-              <ShieldAlert className="w-4 h-4" />
-              <span className="hidden sm:inline">Denunciar</span>
-            </button>
+      {statusNotice && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+          {statusNotice}
+        </p>
+      )}
 
-            <button
-              onClick={() => toggleFavorite(book.id)}
-              className={`p-2 rounded-xl transition-colors ${
-                isFav ? 'text-rose-600 bg-rose-50' : 'text-slate-400 hover:text-rose-600 hover:bg-slate-100'
-              }`}
-              title="Añadir a favoritos"
-            >
-              <Heart className={`w-5 h-5 ${isFav ? 'fill-rose-500' : ''}`} />
-            </button>
+      <article className="grid gap-8 md:grid-cols-[minmax(0,280px)_1fr] md:gap-12">
+        <div className="mx-auto w-full max-w-[280px] space-y-3">
+          <div className="relative aspect-2/3 overflow-hidden rounded-r-lg rounded-l-sm bg-slate-200 shadow-[0_2px_4px_rgba(15,23,42,0.12),0_24px_48px_-16px_rgba(15,23,42,0.5)] ring-1 ring-slate-900/5">
+            <img src={book.coverUrl} alt={`Portada de ${book.title}`} className="h-full w-full object-cover" />
+            <span
+              aria-hidden="true"
+              className="absolute inset-y-0 left-0 w-3 bg-gradient-to-r from-black/30 via-black/10 to-transparent"
+            />
           </div>
+          <button
+            type="button"
+            onClick={() => setIsSampleOpen(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-800 hover:border-amber-500 hover:text-amber-800"
+          >
+            <BookOpen className="h-4 w-4" aria-hidden="true" />
+            Leer muestra gratis
+          </button>
         </div>
 
-        <div className="flex-1 p-4 sm:p-8 space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
-            <div className="md:col-span-4 flex flex-col items-center">
-              <div className="relative group rounded-2xl overflow-hidden shadow-xl border border-slate-200/60 max-w-[240px] w-full aspect-2/3 bg-slate-100">
-                <img
-                  src={book.coverUrl}
-                  alt={book.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                <span
-                  className={`absolute top-3 left-3 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm ${
-                    book.condition === 'nuevo'
-                      ? 'bg-emerald-600 text-white'
-                      : book.condition === 'usado'
-                        ? 'bg-amber-600 text-white'
-                        : 'bg-indigo-600 text-white'
-                  }`}
+        <div className="min-w-0 space-y-6">
+          <header>
+            <h1 className="font-serif text-3xl font-bold leading-tight text-slate-900 sm:text-4xl">{book.title}</h1>
+            <p className="mt-2 text-lg text-slate-600">{book.author}</p>
+            <p className="mt-3 flex items-center gap-1.5 text-sm text-slate-600">
+              {book.reviewCount > 0 ? (
+                <>
+                  <Star className="h-4 w-4 fill-amber-400 text-amber-400" aria-hidden="true" />
+                  <span className="font-semibold text-slate-900">{formatRating(book.rating)}</span>
+                  <a href="#resenas" className="hover:underline">
+                    {book.reviewCount} {book.reviewCount === 1 ? 'reseña' : 'reseñas'}
+                  </a>
+                </>
+              ) : (
+                <span>Sin reseñas todavía</span>
+              )}
+            </p>
+          </header>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <p className="text-3xl font-extrabold tabular-nums text-slate-900">{formatPrice(book.price)}</p>
+            <p className="mt-1 text-sm text-slate-600">
+              {book.condition === 'digital'
+                ? 'Libro digital: después del pago lo leés en tu biblioteca.'
+                : soldOut
+                  ? 'Sin stock por el momento.'
+                  : `Ejemplar ${BOOK_CONDITION_LABELS[book.condition].toLowerCase()} con envío a domicilio${
+                      book.stock !== undefined ? ` · ${book.stock} disponibles` : ''
+                    }.`}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {cartQuantity === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => addToCart(book)}
+                  disabled={soldOut}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-amber-600 px-5 py-3 text-sm font-bold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:flex-none"
                 >
-                  {book.condition === 'nuevo' ? 'Nuevo' : book.condition === 'usado' ? 'Usado' : 'Digital (eBook)'}
-                </span>
-              </div>
-
-              <button
-                onClick={() => setIsSampleOpen(true)}
-                className="mt-4 w-full max-w-[240px] py-2.5 px-4 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-2xs hover:scale-102"
-              >
-                <BookOpen className="w-4 h-4 text-amber-700" />
-                <span>Leer Muestra Gratuita</span>
-              </button>
-            </div>
-
-            <div className="md:col-span-8 space-y-5">
-              <div>
-                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
-                    {book.genre}
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 flex items-center gap-1">
-                    <Globe className="w-3 h-3 text-slate-500" />
-                    {book.language}
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    {book.publicationYear} • {book.pages} págs
-                  </span>
-                </div>
-
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight">{book.title}</h1>
-                <p className="text-base text-slate-600 font-medium mt-1">
-                  Por <span className="text-slate-900 font-semibold">{book.author}</span>
-                </p>
-
-                <div className="flex items-center gap-2 mt-2">
-                  <div className="flex items-center text-amber-400">
-                    {[1, 2, 3, 4, 5].map(star => (
-                      <Star
-                        key={star}
-                        className={`w-4 h-4 ${star <= Math.round(book.rating) ? 'fill-amber-400' : 'text-slate-200 fill-slate-200'}`}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-sm font-bold text-slate-900">{book.rating > 0 ? book.rating : 'Nuevo'}</span>
-                  <span className="text-xs text-slate-500">({book.reviewCount} reseñas comunitarias)</span>
-                </div>
-              </div>
-
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs text-slate-500 font-medium">Precio final de venta:</p>
-                  <p className="text-3xl font-black text-slate-950">${book.price.toFixed(2)}</p>
-                  <p className="text-[11px] text-emerald-700 font-medium mt-0.5">
-                    {book.condition === 'digital'
-                      ? '⚡ Entrega digital inmediata a tu Biblioteca'
-                      : '📦 Envío seguro a domicilio o retiro'}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => addToCart(book)}
-                    className="px-6 py-3 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-xl font-bold text-sm shadow-md shadow-amber-600/25 flex items-center gap-2 transition-all"
-                  >
-                    <ShoppingBag className="w-4 h-4" />
-                    <span>Añadir al Carrito</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 text-xs">
-                <User className="w-4 h-4 text-slate-400" />
-                <div>
-                  <span className="text-slate-500">Publicado por vendedor: </span>
-                  <span className="font-bold text-slate-800">{book.sellerName}</span>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-2">Sinopsis de la obra</h3>
-                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{book.description}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t border-slate-200 pt-8 space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <span>Reseñas y Calificaciones</span>
-                  <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-normal">
-                    {bookReviews.length}
-                  </span>
-                </h3>
-                <p className="text-xs text-slate-500">Opiniones de compradores verificados de Mercado Libros</p>
-              </div>
-            </div>
-
-            {currentUser && !userExistingReview && (
-              <form
-                onSubmit={handleCreateReview}
-                className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <MessageSquarePlus className="w-4 h-4 text-amber-600" />
-                    <span>Deja tu valoración de esta obra</span>
-                  </h4>
-                  <div className="flex items-center gap-1">
-                    {[1, 2, 3, 4, 5].map(star => (
+                  <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+                  Agregar al carrito
+                </button>
+              ) : (
+                <div className="flex flex-1 flex-wrap items-center gap-2 sm:flex-none">
+                  {book.condition !== 'digital' && (
+                    <div className="flex items-center rounded-lg border border-slate-300 bg-white">
                       <button
                         type="button"
-                        key={star}
-                        onClick={() => setNewRating(star)}
-                        className="text-amber-400 hover:scale-110 transition-transform p-0.5"
+                        onClick={() => updateCartQuantity(book.id, cartQuantity - 1)}
+                        aria-label="Quitar un ejemplar"
+                        className="p-3 text-slate-600 hover:text-slate-900"
                       >
-                        <Star className={`w-5 h-5 ${star <= newRating ? 'fill-amber-400' : 'text-slate-300'}`} />
+                        <Minus className="h-4 w-4" aria-hidden="true" />
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                <textarea
-                  rows={3}
-                  placeholder="Comparte tu experiencia de lectura, calidad de la edición o reflexiones sobre la obra..."
-                  value={newComment}
-                  onChange={event => setNewComment(event.target.value)}
-                  className="w-full p-3 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 resize-none text-slate-800"
-                />
-
-                <div className="flex justify-end">
+                      <span className="min-w-8 text-center text-sm font-bold tabular-nums" aria-live="polite">
+                        {cartQuantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => updateCartQuantity(book.id, cartQuantity + 1)}
+                        disabled={cartQuantity >= maxQuantity}
+                        aria-label="Sumar un ejemplar"
+                        className="p-3 text-slate-600 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        <Plus className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                  )}
                   <button
-                    type="submit"
-                    disabled={isSubmittingReview}
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                    type="button"
+                    onClick={openCart}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-emerald-600 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 hover:bg-emerald-100 sm:flex-none"
                   >
-                    Publicar Reseña
+                    <Check className="h-4 w-4" aria-hidden="true" />
+                    En tu carrito · Ver carrito
                   </button>
                 </div>
-              </form>
-            )}
-
-            <div className="space-y-4">
-              {bookReviews.length === 0 ? (
-                <div className="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                  <MessageSquarePlus className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm font-medium text-slate-600">Aún no hay reseñas para este libro</p>
-                  <p className="text-xs text-slate-400">Sé el primero en compartir tu opinión tras leerlo.</p>
-                </div>
-              ) : (
-                bookReviews.map(rev => (
-                  <div
-                    key={rev.id}
-                    className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-2 hover:border-slate-300 transition-colors"
-                  >
-                    {editingReviewId === rev.id ? (
-                      <form onSubmit={handleSaveEditedReview} className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-amber-700">Editando reseña</span>
-                          <div className="flex items-center gap-1">
-                            {[1, 2, 3, 4, 5].map(star => (
-                              <button
-                                type="button"
-                                key={star}
-                                onClick={() => setEditRating(star)}
-                                className="p-0.5 text-amber-400"
-                              >
-                                <Star
-                                  className={`w-4 h-4 ${star <= editRating ? 'fill-amber-400' : 'text-slate-300'}`}
-                                />
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <textarea
-                          rows={2}
-                          value={editComment}
-                          onChange={event => setEditComment(event.target.value)}
-                          className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-amber-500"
-                        />
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setEditingReviewId(null)}
-                            className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            type="submit"
-                            className="px-3 py-1.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700"
-                          >
-                            Guardar Cambios
-                          </button>
-                        </div>
-                      </form>
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <img
-                              src={
-                                rev.userPhoto ||
-                                'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80'
-                              }
-                              alt={rev.userName}
-                              className="w-7 h-7 rounded-full object-cover"
-                            />
-                            <div>
-                              <p className="text-xs font-bold text-slate-900">{rev.userName}</p>
-                              <div className="flex items-center gap-1 text-[11px] text-slate-400">
-                                <div className="flex text-amber-400">
-                                  {[1, 2, 3, 4, 5].map(star => (
-                                    <Star
-                                      key={star}
-                                      className={`w-3 h-3 ${star <= rev.rating ? 'fill-amber-400' : 'text-slate-200'}`}
-                                    />
-                                  ))}
-                                </div>
-                                <span>•</span>
-                                <span>{new Date(rev.createdAt).toLocaleDateString()}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1">
-                            {currentUser && (currentUser.id === rev.userId || currentUser.role === 'admin') ? (
-                              <>
-                                <button
-                                  onClick={() => startEditReview(rev)}
-                                  className="p-1.5 text-slate-400 hover:text-amber-600 rounded-md hover:bg-slate-50"
-                                  title="Editar mi reseña"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => removeReview(rev.id)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 rounded-md hover:bg-slate-50"
-                                  title="Eliminar reseña"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                onClick={() =>
-                                  openReport({
-                                    type: 'review',
-                                    id: rev.id,
-                                    title: `Reseña de ${rev.userName} sobre ${book.title}`,
-                                  })
-                                }
-                                className="p-1 text-slate-300 hover:text-red-500 rounded"
-                                aria-label="Denunciar reseña inapropiada"
-                              >
-                                <ShieldAlert className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        <p className="text-xs text-slate-700 leading-relaxed font-sans pl-9">{rev.comment}</p>
-                      </>
-                    )}
-                  </div>
-                ))
               )}
+              <button
+                type="button"
+                onClick={() => toggleFavorite(book.id)}
+                aria-pressed={isFav}
+                className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-semibold ${
+                  isFav
+                    ? 'border-rose-200 bg-rose-50 text-rose-700'
+                    : 'border-slate-300 bg-white text-slate-700 hover:border-rose-300 hover:text-rose-700'
+                }`}
+              >
+                <Heart className={`h-4 w-4 ${isFav ? 'fill-current' : ''}`} aria-hidden="true" />
+                {isFav ? 'En favoritos' : 'Favorito'}
+              </button>
+              <button
+                type="button"
+                onClick={shareBook}
+                className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-400"
+              >
+                <Share2 className="h-4 w-4" aria-hidden="true" />
+                Compartir
+              </button>
             </div>
+            {book.condition !== 'digital' && cartQuantity > 0 && cartQuantity >= maxQuantity && (
+              <p className="mt-3 text-xs text-slate-500">Ya tenés en el carrito todos los ejemplares disponibles.</p>
+            )}
           </div>
+
+          <section aria-labelledby="sinopsis">
+            <h2 id="sinopsis" className="text-base font-bold text-slate-900">
+              Sinopsis
+            </h2>
+            <p className="mt-2 max-w-prose whitespace-pre-line font-serif text-[15px] leading-7 text-slate-700">
+              {book.description || 'El vendedor todavía no cargó una sinopsis.'}
+            </p>
+          </section>
+
+          <section aria-labelledby="detalles">
+            <h2 id="detalles" className="text-base font-bold text-slate-900">
+              Detalles
+            </h2>
+            <dl className="mt-2 grid grid-cols-1 divide-y divide-slate-200 border-y border-slate-200 text-sm sm:grid-cols-2 sm:divide-y-0">
+              {details.map(detail => (
+                <div
+                  key={detail.label}
+                  className="flex justify-between gap-4 py-2 sm:border-b sm:border-slate-200 sm:pr-6"
+                >
+                  <dt className="text-slate-500">{detail.label}</dt>
+                  <dd className="text-right font-medium text-slate-900">{detail.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+
+          <button
+            type="button"
+            onClick={() => openReport({ type: 'book', id: book.id, title: book.title })}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-700"
+          >
+            <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+            Denunciar esta publicación
+          </button>
         </div>
+      </article>
+
+      <div id="resenas" className="scroll-mt-24">
+        <BookReviews book={book} onReport={openReport} />
       </div>
 
       {isSampleOpen && <SampleReaderModal book={book} onClose={() => setIsSampleOpen(false)} />}

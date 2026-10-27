@@ -4,14 +4,14 @@ import { Bookmark, BookOpen, Calendar, Library, Star } from 'lucide-react';
 
 import { paths, ROUTES } from '@/constants/routes';
 import { useSession } from '@/features/auth/SessionProvider';
-import { useBooks } from '@/features/catalog/BooksProvider';
+import { useBooksByIds } from '@/features/catalog/BooksProvider';
 import { useLibrary } from '@/features/reader/LibraryProvider';
 import { LibraryItem } from '@/types';
 
 export const LibraryPage: React.FC = () => {
   const { currentUser } = useSession();
   const { items: userLibraryItems } = useLibrary();
-  const { books } = useBooks();
+  const { books } = useBooksByIds(userLibraryItems.map(item => item.bookId));
   const navigate = useNavigate();
 
   if (!currentUser) {

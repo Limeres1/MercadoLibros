@@ -6,7 +6,7 @@ import { Book } from '@/types';
 
 export function useSellerBooks() {
   const { currentUser } = useSession();
-  const { books, addBook, updateBook, saveBookContent } = useBooks();
+  const { managedBooks: books, addBook, updateBook, saveBookContent } = useBooks();
   const { showToast } = useToast();
 
   const sellerBooks = currentUser ? books.filter(book => book.sellerId === currentUser.id) : [];
@@ -16,7 +16,13 @@ export function useSellerBooks() {
     const existing = bookData.id ? books.find(book => book.id === bookData.id) : undefined;
 
     if (existing) {
-      updateBook(existing.id, { ...bookData, status: submitForReview ? 'pending_review' : existing.status });
+      const status =
+        submitForReview || existing.status === 'published'
+          ? 'pending_review'
+          : existing.status === 'rejected'
+            ? 'draft'
+            : existing.status;
+      if (!(await updateBook(existing.id, { ...bookData, status }))) return;
       if (bookData.condition === 'digital' && contentText !== undefined) saveBookContent(existing.id, contentText);
       showToast(submitForReview ? 'Libro enviado a revisión del administrador.' : 'Borrador actualizado.', 'success');
       return;
@@ -25,7 +31,7 @@ export function useSellerBooks() {
     const now = new Date().toISOString();
     const id = createId();
     const condition = bookData.condition || 'nuevo';
-    addBook({
+    const created = await addBook({
       id,
       title: bookData.title || 'Título sin definir',
       author: bookData.author || 'Autor desconocido',
@@ -45,12 +51,13 @@ export function useSellerBooks() {
       rating: 0,
       reviewCount: 0,
       salesCount: 0,
-      pages: Number(bookData.pages) || 200,
-      publicationYear: Number(bookData.publicationYear) || new Date().getFullYear(),
-      stock: condition === 'digital' ? undefined : Number(bookData.stock) || 1,
+      pages: Math.round(Number(bookData.pages)) || 200,
+      publicationYear: Math.round(Number(bookData.publicationYear)) || new Date().getFullYear(),
+      stock: condition === 'digital' ? undefined : Math.round(Number(bookData.stock)) || 1,
       createdAt: now,
       updatedAt: now,
     });
+    if (!created) return;
     if (condition === 'digital') saveBookContent(id, contentText || '');
     showToast(
       submitForReview ? '¡Libro enviado para revisión del Administrador!' : 'Guardado como borrador.',
@@ -59,7 +66,7 @@ export function useSellerBooks() {
   };
 
   const withdrawBook = async (bookId: string) => {
-    updateBook(bookId, { status: 'withdrawn' });
+    if (!(await updateBook(bookId, { status: 'withdrawn' }))) return;
     showToast(
       'El libro ha sido retirado de la venta. Los compradores previos conservan su acceso en biblioteca.',
       'info',

@@ -39,7 +39,13 @@ npm run dev                  # http://localhost:3000, incluye /api/ai
 | Vendedor  | `libros.antiguos@mercadolibros.com` |
 | Comprador | `sofia.lectora@mercadolibros.com`   |
 
-El rol admin sólo se asigna desde la semilla o desde Firestore; en el registro se elige comprador o vendedor. ## Reglas de Firestore
+El rol admin sólo se asigna desde la semilla o desde Firestore; en el registro se elige comprador o vendedor. ## Catálogo y búsqueda
+
+El catálogo no descarga todos los libros: pide a Firestore páginas de 24 (`useCatalogBooks`) y carga la siguiente al llegar al final de la lista. Género, idioma, formato y orden se resuelven en Firestore; la búsqueda usa el campo `searchTokens` (palabras de título y autor sin tildes y sus prefijos, más el ISBN), que `BooksProvider` calcula con `buildSearchTokens` cada vez que se crea o edita un libro. Cada combinación de filtro y orden necesita los índices de `firestore.indexes.json`; se publican con `npx firebase deploy --only firestore:indexes`.
+
+Para mostrar libros sueltos (ficha, lector, favoritos, biblioteca, carrito) se usan `useBook(id)` y `useBooksByIds(ids)`, que leen sólo esos documentos.
+
+## Reglas de Firestore
 
 `firestore.rules` define quién lee y escribe cada colección; los tests están en `tests/rules/` y corren contra el emulador con `npm run test:rules` (necesita Java 21: `brew install openjdk@21`). Se publican con `npx firebase deploy --only firestore:rules`.
 

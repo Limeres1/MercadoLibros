@@ -1,18 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { getDocs, limit, query, where } from 'firebase/firestore';
 import { ArrowRight, BookOpen, Camera, CheckCircle, ScanBarcode, X } from 'lucide-react';
 
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { paths } from '@/constants/routes';
 import { useBooks } from '@/features/catalog/BooksProvider';
+import { isbnToken } from '@/lib/searchTokens';
+import { firestoreRefs } from '@/services/firestore';
 
 interface BarcodeDetectorConstructor {
   new (options: { formats: string[] }): { detect: (source: HTMLVideoElement) => Promise<{ rawValue: string }[]> };
 }
 
 export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { books } = useBooks();
+  const { rememberBooks } = useBooks();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -73,23 +76,34 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
     return stopCamera;
   }, [startCamera, stopCamera]);
 
-  const handleCodeDetected = (code: string) => {
+  const findBookByCode = async (code: string) => {
+    const token = isbnToken(code);
+    if (!token) return undefined;
+    const snapshot = await getDocs(
+      query(
+        firestoreRefs.books(),
+        where('status', '==', 'published'),
+        where('searchTokens', 'array-contains', token),
+        limit(1),
+      ),
+    ).catch(() => null);
+    return snapshot?.docs[0]?.data();
+  };
+
+  const handleCodeDetected = async (code: string) => {
     setScannedResult(code);
     stopCamera();
 
-    const cleanCode = code.replace(/[- ]/g, '').trim();
-    const matchedBook = books.find(
-      book => book.isbn.replace(/[- ]/g, '').includes(cleanCode) || cleanCode.includes(book.isbn.replace(/[- ]/g, '')),
-    );
-
+    const matchedBook = await findBookByCode(code);
     if (matchedBook) {
+      rememberBooks([matchedBook]);
       showToast(`¡Libro detectado: "${matchedBook.title}"!`, 'success');
       setTimeout(() => {
         onClose();
         navigate(paths.book(matchedBook.id));
       }, 700);
     } else {
-      showToast(`Código ${code} no coincide con ningún libro registrado.`, 'info');
+      showToast(`El código ${code} no coincide con ningún libro publicado.`, 'info');
       onClose();
       navigate(paths.home(code));
     }
