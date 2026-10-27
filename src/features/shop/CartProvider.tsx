@@ -1,13 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { deleteDoc, doc, onSnapshot, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 
 import { useToast } from '@/components/ui/Toast';
 import { MAX_CART_QUANTITY } from '@/constants/statuses';
-import { STORAGE_KEYS } from '@/constants/storageKeys';
+import { useSession } from '@/features/auth/SessionProvider';
 import { useRequireLogin } from '@/features/auth/useRequireLogin';
 import { useBooks } from '@/features/catalog/BooksProvider';
-import { usePersistentState } from '@/hooks/usePersistentState';
 import { createSafeContext } from '@/lib/createSafeContext';
-import { Book, CartItem } from '@/types';
+import { getErrorMessage } from '@/lib/errors';
+import { db } from '@/services/firebase';
+import { firestoreRefs } from '@/services/firestore';
+import { Book, CartEntry, CartItem } from '@/types';
 
 interface CartContextValue {
   cart: CartItem[];
@@ -21,7 +24,7 @@ interface CartContextValue {
   updateCartQuantity: (bookId: string, quantity: number) => void;
   getCartQuantity: (bookId: string) => number;
   findStockProblem: () => string | null;
-  clearCart: () => void;
+  clearCart: () => Promise<void>;
 }
 
 const [Provider, useCart] = createSafeContext<CartContextValue>('useCart');
@@ -41,28 +44,52 @@ const limitMessage = (book: Book) => {
 };
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser } = useSession();
   const requireLogin = useRequireLogin();
   const { showToast } = useToast();
+  const showToastRef = useRef(showToast);
   const { getBook, watchBooks } = useBooks();
-  const [storedCart, setCart] = usePersistentState<CartItem[]>(STORAGE_KEYS.cart, []);
+  const [entries, setEntries] = useState<CartEntry[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const userId = currentUser?.id;
 
-  const cartBookIds = storedCart
-    .map(item => item.book.id)
+  useEffect(() => {
+    showToastRef.current = showToast;
+  });
+
+  useEffect(() => {
+    setEntries([]);
+    setIsCartOpen(false);
+    if (!userId) return;
+    return onSnapshot(
+      firestoreRefs.cart(userId),
+      snapshot => setEntries(snapshot.docs.map(entryDoc => entryDoc.data())),
+      error => showToastRef.current(getErrorMessage(error), 'error'),
+    );
+  }, [userId]);
+
+  const cartBookIds = entries
+    .map(entry => entry.bookId)
     .sort()
     .join('|');
 
   useEffect(() => (cartBookIds ? watchBooks(cartBookIds.split('|')) : undefined), [cartBookIds, watchBooks]);
 
   const cart = useMemo(
-    () => storedCart.map(item => ({ ...item, book: getBook(item.book.id) ?? item.book })),
-    [storedCart, getBook],
+    () =>
+      [...entries]
+        .sort((first, second) => first.addedAt.localeCompare(second.addedAt))
+        .map(entry => ({ book: getBook(entry.bookId), quantity: entry.quantity }))
+        .filter((item): item is CartItem => Boolean(item.book)),
+    [entries, getBook],
   );
 
-  const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
+  const cartCount = entries.reduce((total, entry) => total + entry.quantity, 0);
   const cartTotal = cart.reduce((total, item) => total + item.book.price * item.quantity, 0);
 
-  const getCartQuantity = (bookId: string) => cart.find(item => item.book.id === bookId)?.quantity ?? 0;
+  const getCartQuantity = (bookId: string) => entries.find(entry => entry.bookId === bookId)?.quantity ?? 0;
+
+  const persist = (write: Promise<void>) => write.catch(error => showToast(getErrorMessage(error), 'error'));
 
   const addToCart = (book: Book): boolean => {
     const user = requireLogin('Iniciá sesión o registrate para comprar libros.');
@@ -72,39 +99,51 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return false;
     }
     const currentBook = getBook(book.id) ?? book;
-    const nextQuantity = getCartQuantity(book.id) + 1;
+    const existing = entries.find(entry => entry.bookId === book.id);
+    const nextQuantity = (existing?.quantity ?? 0) + 1;
     if (nextQuantity > getMaxQuantity(currentBook)) {
       showToast(limitMessage(currentBook), 'info');
       return false;
     }
-    setCart(prev =>
-      prev.some(item => item.book.id === book.id)
-        ? prev.map(item => (item.book.id === book.id ? { ...item, quantity: nextQuantity } : item))
-        : [...prev, { book: currentBook, quantity: 1 }],
+    persist(
+      setDoc(doc(firestoreRefs.cart(user.id), book.id), {
+        bookId: book.id,
+        quantity: nextQuantity,
+        addedAt: existing?.addedAt ?? new Date().toISOString(),
+      }),
     );
     showToast(`"${book.title}" agregado al carrito.`, 'success');
     return true;
   };
 
-  const removeFromCart = (bookId: string) => setCart(prev => prev.filter(item => item.book.id !== bookId));
+  const removeFromCart = (bookId: string) => {
+    if (userId) persist(deleteDoc(doc(firestoreRefs.cart(userId), bookId)));
+  };
 
   const updateCartQuantity = (bookId: string, quantity: number) => {
+    if (!userId) return;
     if (quantity <= 0) {
       removeFromCart(bookId);
       return;
     }
-    const item = cart.find(candidate => candidate.book.id === bookId);
-    if (!item) return;
-    if (quantity > getMaxQuantity(item.book)) {
-      showToast(limitMessage(item.book), 'info');
+    const book = getBook(bookId);
+    if (book && quantity > getMaxQuantity(book)) {
+      showToast(limitMessage(book), 'info');
       return;
     }
-    setCart(prev => prev.map(candidate => (candidate.book.id === bookId ? { ...candidate, quantity } : candidate)));
+    persist(updateDoc(doc(firestoreRefs.cart(userId), bookId), { quantity }));
   };
 
   const findStockProblem = () => {
     const item = cart.find(candidate => candidate.quantity > getMaxQuantity(candidate.book));
     return item ? limitMessage(item.book) : null;
+  };
+
+  const clearCart = async () => {
+    if (!userId || entries.length === 0) return;
+    const batch = writeBatch(db);
+    entries.forEach(entry => batch.delete(doc(firestoreRefs.cart(userId), entry.bookId)));
+    await persist(batch.commit());
   };
 
   return (
@@ -121,7 +160,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateCartQuantity,
         getCartQuantity,
         findStockProblem,
-        clearCart: () => setCart([]),
+        clearCart,
       }}
     >
       {children}
