@@ -8,9 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit && eslint . && prettier --check .",
-    "test": "vitest run",
+    "test": "vitest run --project unit",
     "format": "eslint . --fix && prettier --write .",
-    "seed": "tsx --env-file=.env.local scripts/seed.ts"
+    "seed": "tsx --env-file=.env.local scripts/seed.ts",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-mercadolibros 'vitest run --project rules'"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@types/canvas-confetti": "^1.9.0",
@@ -42,6 +44,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-simple-import-sort": "^14.0.0",
     "firebase-admin": "^13.10.0",
+    "firebase-tools": "^15.34.1",
     "globals": "^17.13.0",
     "jsdom": "^30.1.3",
     "prettier": "^3.9.10",
