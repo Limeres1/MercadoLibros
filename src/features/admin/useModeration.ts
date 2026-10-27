@@ -2,12 +2,12 @@ import { useToast } from '@/components/ui/Toast';
 import { useSession } from '@/features/auth/SessionProvider';
 import { useBooks } from '@/features/catalog/BooksProvider';
 import { useReports } from '@/features/catalog/reports/ReportsProvider';
-import { useReviews } from '@/features/catalog/reviews/ReviewsProvider';
+import { deleteReview } from '@/features/catalog/reviews/reviewsService';
+import { getErrorMessage } from '@/lib/errors';
 
 export function useModeration() {
   const { users, setUserBlocked } = useSession();
   const { updateBook } = useBooks();
-  const { removeReview } = useReviews();
   const { reports, setReportStatus } = useReports();
   const { showToast } = useToast();
 
@@ -35,8 +35,16 @@ export function useModeration() {
     if (!report) return;
 
     if (action === 'remove_target') {
-      if (report.targetType === 'book') await withdrawBook(report.targetId);
-      else await removeReview(report.targetId);
+      if (report.targetType === 'book') {
+        await withdrawBook(report.targetId);
+      } else {
+        try {
+          await deleteReview(report.targetId);
+        } catch (error) {
+          showToast(getErrorMessage(error), 'error');
+          return;
+        }
+      }
     }
 
     setReportStatus(

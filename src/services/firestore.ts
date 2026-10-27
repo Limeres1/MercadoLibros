@@ -11,6 +11,7 @@ import {
   FavoriteEntry,
   LibraryItem,
   Order,
+  Purchase,
   Report,
   Review,
   UserProfile,
@@ -42,5 +43,7 @@ export const firestoreRefs = {
   library: (uid: string) => typedCollection<LibraryItem>('id', COLLECTIONS.users, uid, USER_SUBCOLLECTIONS.library),
   favorites: (uid: string) =>
     typedCollection<FavoriteEntry>('bookId', COLLECTIONS.users, uid, USER_SUBCOLLECTIONS.favorites),
+  purchases: (uid: string) =>
+    typedCollection<Purchase>('bookId', COLLECTIONS.users, uid, USER_SUBCOLLECTIONS.purchases),
   cart: (uid: string) => typedCollection<CartEntry>('bookId', COLLECTIONS.users, uid, USER_SUBCOLLECTIONS.cart),
 };

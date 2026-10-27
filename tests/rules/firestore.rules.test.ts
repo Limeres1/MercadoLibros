@@ -230,6 +230,45 @@ describe('reviews', () => {
     createdAt: NOW,
   });
 
+  it('CA-1: buyers of a physical book can review it thanks to the purchase record', async () => {
+    const physicalReview = { ...review(OTHER_BUYER), bookId: DRAFT_BOOK };
+    const reviewRef = doc(dbAs(OTHER_BUYER), COLLECTIONS.reviews, docIds.review(DRAFT_BOOK, OTHER_BUYER));
+    await assertFails(setDoc(reviewRef, physicalReview));
+    await testEnv.withSecurityRulesDisabled(context =>
+      setDoc(doc(context.firestore(), COLLECTIONS.users, OTHER_BUYER, USER_SUBCOLLECTIONS.purchases, DRAFT_BOOK), {
+        orderId: 'order_2',
+        purchasedAt: NOW,
+      }),
+    );
+    await assertSucceeds(setDoc(reviewRef, physicalReview));
+  });
+
+  it('buyers cannot write their own purchase records', async () => {
+    await assertFails(
+      setDoc(doc(dbAs(OTHER_BUYER), COLLECTIONS.users, OTHER_BUYER, USER_SUBCOLLECTIONS.purchases, BOOK), {
+        orderId: 'fake',
+        purchasedAt: NOW,
+      }),
+    );
+  });
+
+  it('CA-2 and CA-3: one review per user and book, edits and deletes update the book', async () => {
+    const db = dbAs(BUYER);
+    const reviewRef = doc(db, COLLECTIONS.reviews, docIds.review(BOOK, BUYER));
+    await assertFails(setDoc(doc(db, COLLECTIONS.reviews, 'otra_resena'), review(BUYER)));
+    await assertSucceeds(setDoc(reviewRef, review(BUYER)));
+
+    const edit = writeBatch(db);
+    edit.update(reviewRef, { rating: 3, comment: 'Lo pensé mejor', updatedAt: NOW });
+    edit.update(doc(db, COLLECTIONS.books, BOOK), { rating: 3, reviewCount: 1 });
+    await assertSucceeds(edit.commit());
+
+    const removal = writeBatch(db);
+    removal.delete(reviewRef);
+    removal.update(doc(db, COLLECTIONS.books, BOOK), { rating: 0, reviewCount: 0 });
+    await assertSucceeds(removal.commit());
+  });
+
   it('only buyers of the book can review it', async () => {
     await assertSucceeds(setDoc(doc(dbAs(BUYER), COLLECTIONS.reviews, docIds.review(BOOK, BUYER)), review(BUYER)));
     await assertFails(

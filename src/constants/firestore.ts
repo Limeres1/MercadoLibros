@@ -12,6 +12,7 @@ export const USER_SUBCOLLECTIONS = {
   library: 'library',
   favorites: 'favorites',
   cart: 'cart',
+  purchases: 'purchases',
 } as const;
 
 export const docIds = {

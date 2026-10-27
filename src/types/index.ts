@@ -133,6 +133,12 @@ export interface Bookmark {
   createdAt: string;
 }
 
+export interface Purchase {
+  bookId: string;
+  orderId: string;
+  purchasedAt: string;
+}
+
 export interface LibraryItem {
   id: string;
   userId: string;

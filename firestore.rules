@@ -54,6 +54,11 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/users/$(request.auth.uid)/library/$(bookId));
     }
 
+    function hasPurchased(bookId) {
+      return ownsLibraryBook(bookId)
+        || exists(/databases/$(database)/documents/users/$(request.auth.uid)/purchases/$(bookId));
+    }
+
     function bookData(bookId) {
       return get(/databases/$(database)/documents/books/$(bookId)).data;
     }
@@ -95,6 +100,11 @@ service cloud.firestore {
           && incoming().quantity >= 1
           && incoming().quantity <= 10
           && incoming().addedAt is string;
+      }
+
+      match /purchases/{bookId} {
+        allow read: if isSelf(userId) || isAdmin();
+        allow write: if isAdmin();
       }
 
       match /library/{bookId} {
@@ -205,7 +215,7 @@ service cloud.firestore {
 
     match /reviews/{reviewId} {
       allow read: if true;
-      allow create: if isActive() && isValidReview(reviewId) && ownsLibraryBook(incoming().bookId);
+      allow create: if isActive() && isValidReview(reviewId) && hasPurchased(incoming().bookId);
       allow update: if isActive()
         && resource.data.userId == request.auth.uid
         && !changed().hasAny(['bookId', 'userId', 'createdAt'])
