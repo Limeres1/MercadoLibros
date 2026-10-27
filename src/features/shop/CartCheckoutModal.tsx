@@ -20,7 +20,7 @@ import { ROUTES } from '@/constants/routes';
 import { SHIPPING_COST } from '@/constants/statuses';
 import { useAuthModal } from '@/features/auth/AuthModalProvider';
 import { useSession } from '@/features/auth/SessionProvider';
-import { useCart } from '@/features/shop/CartProvider';
+import { getMaxQuantity, useCart } from '@/features/shop/CartProvider';
 import { useCheckout } from '@/features/shop/useCheckout';
 
 export const CartCheckoutModal: React.FC = () => {
@@ -159,6 +159,7 @@ const CartCheckoutDialog: React.FC = () => {
                       <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5">
                         <button
                           onClick={() => updateCartQuantity(item.book.id, item.quantity - 1)}
+                          aria-label={`Quitar un ejemplar de ${item.book.title}`}
                           className="p-1 text-slate-500 hover:text-slate-800 rounded"
                         >
                           <Minus className="w-3 h-3" />
@@ -166,7 +167,9 @@ const CartCheckoutDialog: React.FC = () => {
                         <span className="text-xs font-bold px-1.5 min-w-5 text-center">{item.quantity}</span>
                         <button
                           onClick={() => updateCartQuantity(item.book.id, item.quantity + 1)}
-                          className="p-1 text-slate-500 hover:text-slate-800 rounded"
+                          disabled={item.quantity >= getMaxQuantity(item.book)}
+                          aria-label={`Sumar un ejemplar de ${item.book.title}`}
+                          className="p-1 text-slate-500 hover:text-slate-800 rounded disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                           <Plus className="w-3 h-3" />
                         </button>

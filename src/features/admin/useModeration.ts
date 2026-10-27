@@ -12,20 +12,21 @@ export function useModeration() {
   const { showToast } = useToast();
 
   const approveBook = async (bookId: string) => {
-    updateBook(bookId, { status: 'published', rejectionReason: undefined });
+    if (!(await updateBook(bookId, { status: 'published', rejectionReason: undefined }))) return;
     showToast('Publicación aprobada. El libro ya está visible en el catálogo general.', 'success');
   };
 
   const rejectBook = async (bookId: string, reason: string) => {
-    updateBook(bookId, { status: 'rejected', rejectionReason: reason });
+    if (!(await updateBook(bookId, { status: 'rejected', rejectionReason: reason }))) return;
     showToast('Publicación rechazada y devuelta al vendedor con el motivo indicado.', 'info');
   };
 
   const withdrawBook = async (bookId: string) => {
-    updateBook(bookId, {
+    const withdrawn = await updateBook(bookId, {
       status: 'withdrawn',
       rejectionReason: 'Retirado por el administrador por incumplimiento de normativas.',
     });
+    if (!withdrawn) return;
     showToast('Libro retirado de la venta por administración.', 'info');
   };
 

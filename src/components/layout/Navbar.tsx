@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, useNavigate, useSearchParams } from 'react-router';
+import { Link, NavLink, useLocation, useNavigate, useSearchParams } from 'react-router';
 import {
   BookMarked,
   BookOpen,
@@ -17,7 +17,7 @@ import {
   User,
 } from 'lucide-react';
 
-import { paths, ROUTES, SEARCH_PARAM } from '@/constants/routes';
+import { ROUTES, SEARCH_PARAM } from '@/constants/routes';
 import { useAuthModal } from '@/features/auth/AuthModalProvider';
 import { useSession } from '@/features/auth/SessionProvider';
 import { BarcodeScannerModal } from '@/features/catalog/BarcodeScannerModal';
@@ -39,6 +39,7 @@ export const Navbar: React.FC = () => {
   const { reports } = useReports();
   const { cartCount, openCart } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -59,7 +60,11 @@ export const Navbar: React.FC = () => {
   }, [isUserMenuOpen]);
 
   const handleSearch = (value: string) => {
-    navigate(paths.home(value), { replace: true });
+    const isOnCatalog = location.pathname === ROUTES.home;
+    const params = new URLSearchParams(isOnCatalog ? searchParams : undefined);
+    if (value) params.set(SEARCH_PARAM, value);
+    else params.delete(SEARCH_PARAM);
+    navigate({ pathname: ROUTES.home, search: params.toString() }, { replace: isOnCatalog });
   };
 
   const goTo = (path: string) => {
@@ -91,7 +96,7 @@ export const Navbar: React.FC = () => {
               <input
                 type="search"
                 aria-label="Buscar libros"
-                placeholder="Buscar por título, autor o género..."
+                placeholder="Buscar por título, autor o ISBN..."
                 value={searchQuery}
                 onChange={event => handleSearch(event.target.value)}
                 className="w-full pl-10 pr-24 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-full text-sm text-slate-800 transition-all outline-none"
@@ -279,10 +284,11 @@ export const Navbar: React.FC = () => {
             ) : (
               <button
                 onClick={() => openAuth('login')}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+                aria-label="Ingresar"
+                className="inline-flex items-center gap-1.5 p-2 sm:px-3.5 sm:py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
               >
                 <LogIn className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Ingresar</span>
+                <span className="hidden sm:inline">Ingresar</span>
               </button>
             )}
           </div>
@@ -294,7 +300,7 @@ export const Navbar: React.FC = () => {
             <input
               type="search"
               aria-label="Buscar libros"
-              placeholder="Buscar título, autor o género..."
+              placeholder="Buscar título, autor o ISBN..."
               value={searchQuery}
               onChange={event => handleSearch(event.target.value)}
               className="w-full pl-9 pr-10 py-1.5 bg-slate-100 focus:bg-white border border-slate-200 rounded-full text-sm text-slate-800 outline-none"

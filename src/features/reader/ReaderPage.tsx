@@ -16,18 +16,20 @@ import {
 } from 'lucide-react';
 
 import { EmptyState } from '@/components/ui/EmptyState';
+import { PageLoader } from '@/components/ui/PageLoader';
 import { ROUTES } from '@/constants/routes';
-import { useBooks } from '@/features/catalog/BooksProvider';
+import { useBook, useBooks } from '@/features/catalog/BooksProvider';
 import { useLibrary } from '@/features/reader/LibraryProvider';
 import { useReaderSettings } from '@/features/reader/useReaderSettings';
 import { Book, Bookmark, LibraryItem } from '@/types';
 
 export const ReaderPage: React.FC = () => {
   const { bookId } = useParams();
-  const { getBook } = useBooks();
+  const { book, isLoading } = useBook(bookId);
   const { getItem } = useLibrary();
-  const book = bookId ? getBook(bookId) : undefined;
   const libraryItem = bookId ? getItem(bookId) : undefined;
+
+  if (isLoading && !book) return <PageLoader />;
 
   if (!book || !libraryItem) {
     return (

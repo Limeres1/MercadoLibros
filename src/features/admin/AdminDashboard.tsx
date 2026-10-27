@@ -10,7 +10,7 @@ import { useReports } from '@/features/catalog/reports/ReportsProvider';
 
 export const AdminDashboard: React.FC = () => {
   const { users } = useSession();
-  const { books } = useBooks();
+  const { managedBooks: books } = useBooks();
   const { reports } = useReports();
   const { approveBook, rejectBook, withdrawBook, resolveReport, toggleBlockUser } = useModeration();
   const navigate = useNavigate();

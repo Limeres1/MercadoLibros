@@ -3,17 +3,15 @@ import { useNavigate } from 'react-router';
 import { Heart, ShoppingBag, Trash2 } from 'lucide-react';
 
 import { paths, ROUTES } from '@/constants/routes';
-import { useBooks } from '@/features/catalog/BooksProvider';
+import { useBooksByIds } from '@/features/catalog/BooksProvider';
 import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
 import { useCart } from '@/features/shop/CartProvider';
 
 export const FavoritesPage: React.FC = () => {
-  const { books } = useBooks();
   const { favorites, toggleFavorite } = useFavorites();
+  const { books: favoriteBooks } = useBooksByIds(favorites);
   const { addToCart } = useCart();
   const navigate = useNavigate();
-
-  const favoriteBooks = books.filter(book => favorites.includes(book.id));
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">

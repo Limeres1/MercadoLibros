@@ -4,7 +4,8 @@ import { ArrowLeft, Award, MapPin, Phone, Plus, Trash2, User } from 'lucide-reac
 
 import { FAVORITE_SHOWCASE_LIMIT } from '@/constants/statuses';
 import { useSession } from '@/features/auth/SessionProvider';
-import { useBooks } from '@/features/catalog/BooksProvider';
+import { useBooksByIds } from '@/features/catalog/BooksProvider';
+import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
 import { Book, UserProfile } from '@/types';
 
 export const ProfilePage: React.FC = () => {
@@ -14,7 +15,7 @@ export const ProfilePage: React.FC = () => {
 
 const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) => {
   const { updateUserProfile, updateFavoriteBookIds } = useSession();
-  const { books } = useBooks();
+  const { favorites } = useFavorites();
   const navigate = useNavigate();
 
   const [displayName, setDisplayName] = useState(currentUser.displayName || '');
@@ -25,9 +26,11 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
   const [isSelectingBook, setIsSelectingBook] = useState(false);
 
   const selectedFavIds = currentUser.favoriteBookIds || [];
+  const { books } = useBooksByIds([...selectedFavIds, ...favorites]);
   const selectedFavBooks = selectedFavIds
     .map(id => books.find(book => book.id === id))
     .filter((book): book is Book => Boolean(book));
+  const selectableBooks = books.filter(book => favorites.includes(book.id) && !selectedFavIds.includes(book.id));
 
   const handleSaveProfile = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -202,7 +205,7 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
             {isSelectingBook && (
               <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-3 animate-in fade-in">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-900">Selecciona un libro del catálogo:</span>
+                  <span className="text-xs font-bold text-amber-900">Elegí uno de tus favoritos:</span>
                   <button
                     onClick={() => setIsSelectingBook(false)}
                     className="text-xs text-slate-500 hover:text-slate-800"
@@ -212,29 +215,28 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
                 </div>
 
                 <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-                  {books
-                    .filter(book => !selectedFavIds.includes(book.id))
-                    .map(book => (
-                      <button
-                        key={book.id}
-                        type="button"
-                        onClick={() => handleAddFavoriteBook(book.id)}
-                        className="w-full text-left p-2 bg-white hover:bg-amber-100/70 border border-amber-100 rounded-xl flex items-center gap-3 transition-colors group"
-                      >
-                        <img
-                          src={book.coverUrl}
-                          alt={book.title}
-                          className="w-8 h-10 object-cover rounded shadow-2xs"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-slate-800 group-hover:text-amber-900 truncate">
-                            {book.title}
-                          </p>
-                          <p className="text-[11px] text-slate-500 truncate">{book.author}</p>
-                        </div>
-                        <Plus className="w-4 h-4 text-amber-600 shrink-0" />
-                      </button>
-                    ))}
+                  {selectableBooks.length === 0 && (
+                    <p className="text-xs text-slate-500">
+                      Marcá libros con el corazón en el catálogo para poder destacarlos acá.
+                    </p>
+                  )}
+                  {selectableBooks.map(book => (
+                    <button
+                      key={book.id}
+                      type="button"
+                      onClick={() => handleAddFavoriteBook(book.id)}
+                      className="w-full text-left p-2 bg-white hover:bg-amber-100/70 border border-amber-100 rounded-xl flex items-center gap-3 transition-colors group"
+                    >
+                      <img src={book.coverUrl} alt={book.title} className="w-8 h-10 object-cover rounded shadow-2xs" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-slate-800 group-hover:text-amber-900 truncate">
+                          {book.title}
+                        </p>
+                        <p className="text-[11px] text-slate-500 truncate">{book.author}</p>
+                      </div>
+                      <Plus className="w-4 h-4 text-amber-600 shrink-0" />
+                    </button>
+                  ))}
                 </div>
               </div>
             )}

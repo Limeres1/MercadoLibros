@@ -4,6 +4,12 @@ export const SIGNUP_ROLES = ['buyer', 'seller'] as const;
 
 export const BOOK_CONDITIONS = ['digital', 'nuevo', 'usado'] as const;
 
+export const BOOK_CONDITION_LABELS: Record<(typeof BOOK_CONDITIONS)[number], string> = {
+  digital: 'Digital',
+  nuevo: 'Nuevo',
+  usado: 'Usado',
+};
+
 export const BOOK_STATUSES = ['draft', 'pending_review', 'published', 'rejected', 'withdrawn'] as const;
 
 export const BOOK_STATUS_TRANSITIONS: Record<
@@ -48,6 +54,8 @@ export const READER_THEMES = ['light', 'sepia', 'dark'] as const;
 export const FAVORITE_SHOWCASE_LIMIT = 4;
 
 export const SHIPPING_COST = 4.5;
+
+export const MAX_CART_QUANTITY = 10;
 
 export function canTransition<S extends string>(transitions: Record<S, readonly S[]>, from: S, to: S) {
   return transitions[from].includes(to);

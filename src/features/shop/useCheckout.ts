@@ -1,7 +1,6 @@
 import { useToast } from '@/components/ui/Toast';
 import { SHIPPING_COST } from '@/constants/statuses';
 import { useRequireLogin } from '@/features/auth/useRequireLogin';
-import { useBooks } from '@/features/catalog/BooksProvider';
 import { useLibrary } from '@/features/reader/LibraryProvider';
 import { useCart } from '@/features/shop/CartProvider';
 import { useOrders } from '@/features/shop/OrdersProvider';
@@ -11,9 +10,8 @@ import { Order } from '@/types';
 export function useCheckout() {
   const requireLogin = useRequireLogin();
   const { showToast } = useToast();
-  const { updateBook } = useBooks();
   const { addPurchasedBooks } = useLibrary();
-  const { cart, cartTotal, clearCart } = useCart();
+  const { cart, cartTotal, clearCart, findStockProblem } = useCart();
   const { addOrder } = useOrders();
 
   const completeCheckout = async (paymentMethod: string, address?: string): Promise<boolean> => {
@@ -21,6 +19,11 @@ export function useCheckout() {
     if (!user) return false;
     if (cart.length === 0) {
       showToast('El carrito está vacío.', 'error');
+      return false;
+    }
+    const stockProblem = findStockProblem();
+    if (stockProblem) {
+      showToast(`${stockProblem} Ajustá la cantidad en el carrito.`, 'error');
       return false;
     }
 
@@ -53,12 +56,6 @@ export function useCheckout() {
       paidAt: now,
     };
 
-    cart.forEach(({ book, quantity }) =>
-      updateBook(book.id, current => ({
-        salesCount: (current.salesCount || 0) + quantity,
-        stock: current.stock !== undefined ? Math.max(0, current.stock - quantity) : undefined,
-      })),
-    );
     addOrder(order);
     addPurchasedBooks(
       cart.map(item => item.book).filter(book => book.condition === 'digital'),
