@@ -1,19 +1,20 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 
 import { useToast } from '@/components/ui/Toast';
-import { STORAGE_KEYS } from '@/constants/storageKeys';
-import { INITIAL_LIBRARY } from '@/data/initialData';
 import { useSession } from '@/features/auth/SessionProvider';
-import { usePersistentState } from '@/hooks/usePersistentState';
 import { createSafeContext } from '@/lib/createSafeContext';
+import { getErrorMessage } from '@/lib/errors';
 import { createId } from '@/lib/ids';
-import { Book, Bookmark, LibraryItem } from '@/types';
+import { firestoreRefs } from '@/services/firestore';
+import { Bookmark, LibraryItem } from '@/types';
 
 interface LibraryContextValue {
   items: LibraryItem[];
+  isLoading: boolean;
   getItem: (bookId: string) => LibraryItem | undefined;
   hasBook: (bookId: string) => boolean;
-  addPurchasedBooks: (books: Book[], orderId: string) => void;
+  hasPurchased: (bookId: string) => boolean;
   updateReadingProgress: (bookId: string, page: number) => void;
   addBookmark: (bookId: string, page: number, title: string, note?: string) => void;
   deleteBookmark: (bookId: string, bookmarkId: string) => void;
@@ -25,68 +26,92 @@ export { useLibrary };
 export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useSession();
   const { showToast } = useToast();
-  const [allItems, setAllItems] = usePersistentState<LibraryItem[]>(STORAGE_KEYS.library, INITIAL_LIBRARY);
+  const showToastRef = useRef(showToast);
+  const [items, setItems] = useState<LibraryItem[]>([]);
+  const [purchasedIds, setPurchasedIds] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(false);
+  const userId = currentUser?.id;
 
-  const items = currentUser ? allItems.filter(item => item.userId === currentUser.id) : [];
+  useEffect(() => {
+    showToastRef.current = showToast;
+  });
+
+  useEffect(() => {
+    setItems([]);
+    if (!userId) return;
+    setIsLoading(true);
+    return onSnapshot(
+      firestoreRefs.library(userId),
+      snapshot => {
+        setItems(
+          snapshot.docs
+            .map(itemDoc => itemDoc.data())
+            .sort((first, second) => second.purchasedAt.localeCompare(first.purchasedAt)),
+        );
+        setIsLoading(false);
+      },
+      error => {
+        showToastRef.current(getErrorMessage(error), 'error');
+        setIsLoading(false);
+      },
+    );
+  }, [userId]);
+
+  useEffect(() => {
+    setPurchasedIds(new Set());
+    if (!userId) return;
+    return onSnapshot(
+      firestoreRefs.purchases(userId),
+      snapshot => setPurchasedIds(new Set(snapshot.docs.map(purchase => purchase.id))),
+      () => undefined,
+    );
+  }, [userId]);
+
   const getItem = (bookId: string) => items.find(item => item.bookId === bookId);
   const hasBook = (bookId: string) => items.some(item => item.bookId === bookId);
+  const hasPurchased = (bookId: string) => purchasedIds.has(bookId) || hasBook(bookId);
 
-  const updateOwnItem = (bookId: string, update: (item: LibraryItem) => LibraryItem) => {
-    if (!currentUser) return;
-    setAllItems(prev =>
-      prev.map(item => (item.userId === currentUser.id && item.bookId === bookId ? update(item) : item)),
-    );
+  const saveItem = (bookId: string, changes: Pick<Partial<LibraryItem>, 'lastReadPage' | 'bookmarks'>) => {
+    if (!userId) return Promise.resolve(false);
+    return updateDoc(doc(firestoreRefs.library(userId), bookId), changes)
+      .then(() => true)
+      .catch(error => {
+        showToast(getErrorMessage(error), 'error');
+        return false;
+      });
   };
 
-  const addPurchasedBooks = (books: Book[], orderId: string) => {
-    if (!currentUser) return;
-    setAllItems(prev => {
-      const owned = new Set(prev.filter(item => item.userId === currentUser.id).map(item => item.bookId));
-      const newItems: LibraryItem[] = books
-        .filter(book => !owned.has(book.id))
-        .map(book => ({
-          id: book.id,
-          userId: currentUser.id,
-          bookId: book.id,
-          orderId,
-          title: book.title,
-          author: book.author,
-          coverUrl: book.coverUrl,
-          purchasedAt: new Date().toISOString(),
-          lastReadPage: 1,
-          totalPages: Math.max(book.pages || 10, 10),
-          bookmarks: [],
-        }));
-      return [...newItems, ...prev];
-    });
+  const updateReadingProgress = (bookId: string, page: number) => {
+    const item = getItem(bookId);
+    if (item && item.lastReadPage !== page) saveItem(bookId, { lastReadPage: Math.min(page, item.totalPages) });
   };
 
-  const updateReadingProgress = (bookId: string, page: number) =>
-    updateOwnItem(bookId, item => ({ ...item, lastReadPage: page }));
-
-  const addBookmark = (bookId: string, page: number, title: string, note?: string) => {
+  const addBookmark = async (bookId: string, page: number, title: string, note?: string) => {
+    const item = getItem(bookId);
+    if (!item) return;
     const bookmark: Bookmark = {
       id: createId(),
       page,
       title: title || `Marcador en página ${page}`,
-      note,
+      ...(note ? { note } : {}),
       createdAt: new Date().toISOString(),
     };
-    updateOwnItem(bookId, item => ({ ...item, bookmarks: [...item.bookmarks, bookmark] }));
-    showToast(`Marcador guardado en la página ${page}`, 'success');
+    if (await saveItem(bookId, { bookmarks: [...item.bookmarks, bookmark] })) {
+      showToast(`Marcador guardado en la página ${page}.`, 'success');
+    }
   };
 
-  const deleteBookmark = (bookId: string, bookmarkId: string) => {
-    updateOwnItem(bookId, item => ({
-      ...item,
-      bookmarks: item.bookmarks.filter(bookmark => bookmark.id !== bookmarkId),
-    }));
-    showToast('Marcador eliminado.', 'info');
+  const deleteBookmark = async (bookId: string, bookmarkId: string) => {
+    const item = getItem(bookId);
+    if (!item) return;
+    if (await saveItem(bookId, { bookmarks: item.bookmarks.filter(bookmark => bookmark.id !== bookmarkId) })) {
+      showToast('Marcador eliminado.', 'info');
+    }
   };
 
   return (
     <Provider
-      value={{ items, getItem, hasBook, addPurchasedBooks, updateReadingProgress, addBookmark, deleteBookmark }}
+      value={{ items, isLoading, getItem, hasBook, hasPurchased, updateReadingProgress, addBookmark, deleteBookmark }}
     >
       {children}
     </Provider>

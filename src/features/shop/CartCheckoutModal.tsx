@@ -1,27 +1,16 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router';
-import confetti from 'canvas-confetti';
-import {
-  ArrowRight,
-  BookOpen,
-  CheckCircle,
-  CreditCard,
-  Minus,
-  Plus,
-  ShieldCheck,
-  ShoppingBag,
-  Trash2,
-  Truck,
-  X,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2, Lock, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 
 import { Modal } from '@/components/ui/Modal';
-import { ROUTES } from '@/constants/routes';
-import { SHIPPING_COST } from '@/constants/statuses';
+import { DEFAULT_PAYMENT_OPTION, PAYMENT_OPTIONS, PaymentOption } from '@/constants/payments';
+import { BOOK_CONDITION_LABELS, SHIPPING_COST } from '@/constants/statuses';
 import { useAuthModal } from '@/features/auth/AuthModalProvider';
 import { useSession } from '@/features/auth/SessionProvider';
+import { AddressPicker, formatShippingAddress, ShippingAddress } from '@/features/shop/AddressPicker';
 import { getMaxQuantity, useCart } from '@/features/shop/CartProvider';
+import { useOrders } from '@/features/shop/OrdersProvider';
 import { useCheckout } from '@/features/shop/useCheckout';
+import { formatPrice } from '@/lib/format';
 
 export const CartCheckoutModal: React.FC = () => {
   const { isCartOpen } = useCart();
@@ -30,351 +19,251 @@ export const CartCheckoutModal: React.FC = () => {
 
 const CartCheckoutDialog: React.FC = () => {
   const { cart, cartTotal, closeCart, removeFromCart, updateCartQuantity, clearCart } = useCart();
-  const { completeCheckout } = useCheckout();
+  const { startCheckout, isStarting, error, clearError } = useCheckout();
   const { currentUser } = useSession();
   const { openAuth } = useAuthModal();
-  const navigate = useNavigate();
 
-  const [step, setStep] = useState<'cart' | 'checkout' | 'success'>('cart');
-  const [paymentMethod, setPaymentMethod] = useState<'credit_card' | 'mercadopago' | 'transfer'>('mercadopago');
-  const [shippingAddress, setShippingAddress] = useState(currentUser?.location || 'Av. Corrientes 1240, CABA');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [step, setStep] = useState<'cart' | 'checkout'>('cart');
+  const { orders } = useOrders();
+  const [shippingAddress, setShippingAddress] = useState<ShippingAddress>(() => ({
+    street: orders.find(order => order.shippingAddress)?.shippingAddress ?? '',
+    details: '',
+    location: null,
+  }));
+  const [paymentOption, setPaymentOption] = useState<PaymentOption>(DEFAULT_PAYMENT_OPTION);
 
   const hasPhysicalBooks = cart.some(item => item.book.condition !== 'digital');
   const shippingCost = hasPhysicalBooks ? SHIPPING_COST : 0;
-  const finalTotal = cartTotal + shippingCost;
+  const total = cartTotal + shippingCost;
+  const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  const handleProceedToCheckout = () => {
+  const goToCheckout = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
     if (!currentUser) {
       openAuth('login');
       return;
     }
+    clearError();
     setStep('checkout');
   };
 
-  const handlePay = async (event: React.FormEvent) => {
+  const handlePay = (event: React.FormEvent) => {
     event.preventDefault();
-    setIsProcessing(true);
-
-    const methodLabels = {
-      credit_card: 'Tarjeta de Crédito / Débito (Visa •••• 4242)',
-      mercadopago: 'Mercado Pago (Aprobación Inmediata)',
-      transfer: 'Transferencia Bancaria Inmediata',
-    };
-
-    setTimeout(async () => {
-      const success = await completeCheckout(methodLabels[paymentMethod], shippingAddress);
-      setIsProcessing(false);
-      if (success) {
-        setStep('success');
-        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-      }
-    }, 900);
-  };
-
-  const handleClose = closeCart;
-
-  const goTo = (path: string) => {
-    closeCart();
-    navigate(path);
+    startCheckout(
+      hasPhysicalBooks ? formatShippingAddress(shippingAddress) : '',
+      paymentOption,
+      hasPhysicalBooks ? shippingAddress.location : null,
+    );
   };
 
   return (
-    <Modal onClose={handleClose} labelledBy="cart-title">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/80">
+    <Modal onClose={closeCart} labelledBy="cart-title">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-6 py-4">
         <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
-            <ShoppingBag className="w-5 h-5" />
-          </div>
+          {step === 'checkout' ? (
+            <button
+              type="button"
+              onClick={() => setStep('cart')}
+              aria-label="Volver al carrito"
+              className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+            >
+              <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+            </button>
+          ) : (
+            <span className="rounded-xl bg-amber-100 p-2 text-amber-700">
+              <ShoppingBag className="h-5 w-5" aria-hidden="true" />
+            </span>
+          )}
           <div>
-            <h3 id="cart-title" className="font-bold text-slate-900 text-base">
-              {step === 'cart'
-                ? 'Carrito de Compras'
-                : step === 'checkout'
-                  ? 'Confirmar Compra y Pago'
-                  : '¡Compra Exitosa!'}
-            </h3>
+            <h2 id="cart-title" className="text-base font-bold text-slate-900">
+              {step === 'cart' ? 'Tu carrito' : 'Finalizar compra'}
+            </h2>
             <p className="text-xs text-slate-500">
-              {step === 'cart' ? `${cart.length} títulos seleccionados` : 'Transacción protegida'}
+              {itemCount} {itemCount === 1 ? 'libro' : 'libros'}
             </p>
           </div>
         </div>
         <button
-          onClick={handleClose}
-          className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+          type="button"
+          onClick={closeCart}
+          aria-label="Cerrar carrito"
+          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
         >
-          <X className="w-5 h-5" />
+          <X className="h-5 w-5" aria-hidden="true" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {step === 'cart' && (
-          <>
-            {cart.length === 0 ? (
-              <div className="text-center py-12 space-y-3">
-                <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto" />
-                <p className="text-sm font-bold text-slate-700">Tu carrito de compras está vacío</p>
-                <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                  Explora el catálogo de obras y agrega tus libros favoritos para adquirirlos.
-                </p>
-                <button
-                  onClick={handleClose}
-                  className="mt-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors"
-                >
-                  Ver Catálogo de Libros
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {cart.map(item => (
-                  <div
-                    key={item.book.id}
-                    className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200/80"
-                  >
-                    <img
-                      src={item.book.coverUrl}
-                      alt={item.book.title}
-                      className="w-12 h-16 object-cover rounded-lg shadow-2xs border border-slate-200"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
-                            item.book.condition === 'digital'
-                              ? 'bg-indigo-100 text-indigo-700'
-                              : 'bg-emerald-100 text-emerald-700'
-                          }`}
-                        >
-                          {item.book.condition}
-                        </span>
-                      </div>
-                      <h4 className="font-bold text-xs text-slate-900 truncate">{item.book.title}</h4>
-                      <p className="text-[11px] text-slate-500 truncate">{item.book.author}</p>
-                      <p className="text-xs font-black text-slate-900 mt-1">
-                        ${(item.book.price * item.quantity).toFixed(2)}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-2">
-                      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5">
-                        <button
-                          onClick={() => updateCartQuantity(item.book.id, item.quantity - 1)}
-                          aria-label={`Quitar un ejemplar de ${item.book.title}`}
-                          className="p-1 text-slate-500 hover:text-slate-800 rounded"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="text-xs font-bold px-1.5 min-w-5 text-center">{item.quantity}</span>
-                        <button
-                          onClick={() => updateCartQuantity(item.book.id, item.quantity + 1)}
-                          disabled={item.quantity >= getMaxQuantity(item.book)}
-                          aria-label={`Sumar un ejemplar de ${item.book.title}`}
-                          className="p-1 text-slate-500 hover:text-slate-800 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      </div>
-
+      <div className="flex-1 space-y-5 overflow-y-auto p-6">
+        {cart.length === 0 ? (
+          <div className="space-y-3 py-12 text-center">
+            <ShoppingBag className="mx-auto h-12 w-12 text-slate-300" aria-hidden="true" />
+            <p className="text-sm font-bold text-slate-700">Tu carrito está vacío</p>
+            <p className="mx-auto max-w-xs text-xs text-slate-500">Agregá libros desde el catálogo para comprarlos.</p>
+            <button
+              type="button"
+              onClick={closeCart}
+              className="mt-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+            >
+              Ver el catálogo
+            </button>
+          </div>
+        ) : step === 'cart' ? (
+          <ul className="space-y-3">
+            {cart.map(item => (
+              <li
+                key={item.book.id}
+                className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"
+              >
+                <img src={item.book.coverUrl} alt="" className="h-16 w-12 rounded object-cover" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-900">{item.book.title}</p>
+                  <p className="truncate text-xs text-slate-500">
+                    {item.book.author} · {BOOK_CONDITION_LABELS[item.book.condition]}
+                  </p>
+                  <p className="mt-1 text-sm font-bold tabular-nums text-slate-900">
+                    {formatPrice(item.book.price * item.quantity)}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  {item.book.condition !== 'digital' && (
+                    <div className="flex items-center rounded-lg border border-slate-300">
                       <button
-                        onClick={() => removeFromCart(item.book.id)}
-                        className="text-slate-400 hover:text-rose-600 p-1 rounded"
-                        title="Eliminar del carrito"
+                        type="button"
+                        onClick={() => updateCartQuantity(item.book.id, item.quantity - 1)}
+                        aria-label={`Quitar un ejemplar de ${item.book.title}`}
+                        className="p-1.5 text-slate-600 hover:text-slate-900"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Minus className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                      <span className="min-w-6 text-center text-sm font-semibold tabular-nums">{item.quantity}</span>
+                      <button
+                        type="button"
+                        onClick={() => updateCartQuantity(item.book.id, item.quantity + 1)}
+                        disabled={item.quantity >= getMaxQuantity(item.book)}
+                        aria-label={`Sumar un ejemplar de ${item.book.title}`}
+                        className="p-1.5 text-slate-600 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
                     </div>
-                  </div>
-                ))}
-
-                <div className="pt-2 flex justify-between items-center text-xs">
-                  <button onClick={clearCart} className="text-slate-400 hover:text-rose-600 font-medium">
-                    Vaciar carrito
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeFromCart(item.book.id)}
+                    aria-label={`Quitar ${item.book.title} del carrito`}
+                    className="rounded p-1 text-slate-400 hover:text-red-700"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </div>
+              </li>
+            ))}
+            <li>
+              <button type="button" onClick={clearCart} className="text-xs text-slate-500 hover:text-red-700">
+                Vaciar carrito
+              </button>
+            </li>
+          </ul>
+        ) : (
+          <form id="checkout-form" onSubmit={handlePay} className="space-y-5">
+            {hasPhysicalBooks && <AddressPicker value={shippingAddress} onChange={setShippingAddress} />}
+
+            <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+              {cart.map(item => (
+                <li key={item.book.id} className="flex justify-between gap-3 px-4 py-2.5 text-sm">
+                  <span className="min-w-0 truncate text-slate-700">
+                    {item.quantity > 1 && `${item.quantity} × `}
+                    {item.book.title}
+                  </span>
+                  <span className="shrink-0 tabular-nums text-slate-900">
+                    {formatPrice(item.book.price * item.quantity)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            <fieldset>
+              <legend className="text-sm font-semibold text-slate-900">Medio de pago</legend>
+              <div className="mt-2 space-y-2">
+                {Object.entries(PAYMENT_OPTIONS).map(([value, option]) => (
+                  <label
+                    key={value}
+                    className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${
+                      paymentOption === value
+                        ? 'border-sky-600 bg-sky-50'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="payment-option"
+                      value={value}
+                      checked={paymentOption === value}
+                      onChange={() => setPaymentOption(value as PaymentOption)}
+                      className="mt-1 accent-sky-600"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-900">{option.label}</span>
+                      <span className="block text-xs text-slate-500">{option.description}</span>
+                    </span>
+                  </label>
+                ))}
               </div>
-            )}
-          </>
-        )}
+            </fieldset>
 
-        {step === 'checkout' && (
-          <form onSubmit={handlePay} className="space-y-5">
-            {hasPhysicalBooks && (
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                  <Truck className="w-4 h-4 text-amber-600" />
-                  <span>Dirección de Envío Domiciliario</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={shippingAddress}
-                  onChange={event => setShippingAddress(event.target.value)}
-                  placeholder="Calle, número, ciudad, código postal"
-                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 outline-none focus:border-amber-500"
-                />
-                <p className="text-[11px] text-slate-500">Despacho garantizado dentro de las 48hs hábiles.</p>
-              </div>
-            )}
-
-            <div className="space-y-2.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
-                Selecciona tu Medio de Pago
-              </label>
-
-              <div className="space-y-2">
-                <label
-                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                    paymentMethod === 'mercadopago'
-                      ? 'border-amber-500 bg-amber-50/50 ring-2 ring-amber-500/20'
-                      : 'border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="payment"
-                    checked={paymentMethod === 'mercadopago'}
-                    onChange={() => setPaymentMethod('mercadopago')}
-                    className="accent-amber-600"
-                  />
-                  <div className="flex-1">
-                    <p className="font-bold text-xs text-slate-900">Mercado Pago</p>
-                    <p className="text-[11px] text-slate-500">Saldo en cuenta, débito o cuotas</p>
-                  </div>
-                  <span className="text-[10px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded">Rápido</span>
-                </label>
-
-                <label
-                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                    paymentMethod === 'credit_card'
-                      ? 'border-amber-500 bg-amber-50/50 ring-2 ring-amber-500/20'
-                      : 'border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="payment"
-                    checked={paymentMethod === 'credit_card'}
-                    onChange={() => setPaymentMethod('credit_card')}
-                    className="accent-amber-600"
-                  />
-                  <div className="flex-1">
-                    <p className="font-bold text-xs text-slate-900">Tarjeta de Crédito / Débito</p>
-                    <p className="text-[11px] text-slate-500">Visa, Mastercard, American Express</p>
-                  </div>
-                  <CreditCard className="w-4 h-4 text-slate-400" />
-                </label>
-
-                <label
-                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                    paymentMethod === 'transfer'
-                      ? 'border-amber-500 bg-amber-50/50 ring-2 ring-amber-500/20'
-                      : 'border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="payment"
-                    checked={paymentMethod === 'transfer'}
-                    onChange={() => setPaymentMethod('transfer')}
-                    className="accent-amber-600"
-                  />
-                  <div className="flex-1">
-                    <p className="font-bold text-xs text-slate-900">Transferencia Bancaria Inmediata</p>
-                    <p className="text-[11px] text-slate-500">Acreditación instantánea</p>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 p-3 bg-emerald-50 rounded-xl text-emerald-800 text-xs font-medium">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>Pago encriptado con certificación SSL y custodia de Mercado Libros.</span>
-            </div>
-          </form>
-        )}
-
-        {step === 'success' && (
-          <div className="text-center py-6 space-y-4">
-            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-md">
-              <CheckCircle className="w-10 h-10 animate-in zoom-in-75 duration-300" />
-            </div>
-            <h4 className="text-xl font-extrabold text-slate-900">¡Pago y Pedido Confirmados!</h4>
-            <p className="text-xs text-slate-600 max-w-sm mx-auto">
-              Los libros digitales ya están en tu <strong className="text-slate-900">Biblioteca Personal</strong>; los
-              físicos se envían a la dirección indicada.
+            <p className="flex items-start gap-2 rounded-lg bg-slate-100 px-3 py-2.5 text-xs text-slate-700">
+              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              El pago se procesa en Mercado Pago. Cuando se acredita, el pedido se confirma solo y los libros digitales
+              aparecen en tu biblioteca.
             </p>
 
-            <div className="pt-2 flex flex-col gap-2 max-w-xs mx-auto">
-              <button
-                onClick={() => goTo(ROUTES.library)}
-                className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md transition-colors"
-              >
-                <BookOpen className="w-4 h-4" />
-                <span>Ir a mi Biblioteca y Leer</span>
-              </button>
-
-              <button
-                onClick={() => goTo(ROUTES.orders)}
-                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold transition-colors"
-              >
-                Ver Historial de Pedidos
-              </button>
-            </div>
-          </div>
+            {error && (
+              <p role="alert" className="rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-800">
+                {error}
+              </p>
+            )}
+          </form>
         )}
       </div>
 
-      {step !== 'success' && cart.length > 0 && (
-        <div className="p-6 border-t border-slate-100 bg-slate-50 space-y-3">
-          <div className="space-y-1.5 text-xs text-slate-600">
+      {cart.length > 0 && (
+        <div className="space-y-3 border-t border-slate-100 bg-slate-50 p-6">
+          <dl className="space-y-1.5 text-sm text-slate-600">
             <div className="flex justify-between">
-              <span>Subtotal ({cart.length} libros):</span>
-              <span className="font-semibold text-slate-800">${cartTotal.toFixed(2)}</span>
+              <dt>Subtotal</dt>
+              <dd className="tabular-nums text-slate-900">{formatPrice(cartTotal)}</dd>
             </div>
             <div className="flex justify-between">
-              <span>Envío {hasPhysicalBooks ? 'a domicilio' : 'digital'}:</span>
-              <span className="font-semibold text-slate-800">
-                {hasPhysicalBooks ? `$${shippingCost.toFixed(2)}` : 'Gratis'}
-              </span>
+              <dt>Envío</dt>
+              <dd className="tabular-nums text-slate-900">{hasPhysicalBooks ? formatPrice(shippingCost) : 'Gratis'}</dd>
             </div>
-            <div className="flex justify-between text-base font-black text-slate-950 pt-2 border-t border-slate-200">
-              <span>Total a Pagar:</span>
-              <span className="text-amber-700">${finalTotal.toFixed(2)}</span>
+            <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-bold text-slate-900">
+              <dt>Total</dt>
+              <dd className="tabular-nums">{formatPrice(total)}</dd>
             </div>
-          </div>
+          </dl>
 
           {step === 'cart' ? (
             <button
-              onClick={handleProceedToCheckout}
-              className="w-full py-3 bg-amber-600 hover:bg-amber-700 active:scale-98 text-white rounded-xl font-bold text-xs shadow-md shadow-amber-600/25 flex items-center justify-center gap-2 transition-all"
+              key="continue"
+              type="button"
+              onClick={goToCheckout}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-600 py-3 text-sm font-bold text-white hover:bg-amber-700"
             >
-              <span>Continuar a la Compra</span>
-              <ArrowRight className="w-4 h-4" />
+              Continuar
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
           ) : (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setStep('cart')}
-                className="px-4 py-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl font-bold text-xs transition-colors"
-              >
-                Volver
-              </button>
-              <button
-                onClick={handlePay}
-                disabled={isProcessing}
-                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-600/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-              >
-                {isProcessing ? (
-                  <span>Procesando pago...</span>
-                ) : (
-                  <>
-                    <span>Pagar ${finalTotal.toFixed(2)}</span>
-                    <CheckCircle className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </div>
+            <button
+              key="pay"
+              type="submit"
+              form="checkout-form"
+              disabled={isStarting}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-sky-600 py-3 text-sm font-bold text-white hover:bg-sky-700 disabled:opacity-60"
+            >
+              {isStarting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+              {isStarting ? 'Preparando el pago…' : `Continuar a Mercado Pago · ${formatPrice(total)}`}
+            </button>
           )}
         </div>
       )}

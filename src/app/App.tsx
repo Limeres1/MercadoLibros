@@ -14,6 +14,7 @@ const ProfilePage = lazyPage(() => import('@/features/auth/ProfilePage'), 'Profi
 const LibraryPage = lazyPage(() => import('@/features/reader/LibraryPage'), 'LibraryPage');
 const ReaderPage = lazyPage(() => import('@/features/reader/ReaderPage'), 'ReaderPage');
 const OrdersPage = lazyPage(() => import('@/features/shop/OrdersPage'), 'OrdersPage');
+const PaymentSimulationPage = lazyPage(() => import('@/features/shop/PaymentSimulationPage'), 'PaymentSimulationPage');
 const SellerDashboard = lazyPage(() => import('@/features/seller/SellerDashboard'), 'SellerDashboard');
 const AdminDashboard = lazyPage(() => import('@/features/admin/AdminDashboard'), 'AdminDashboard');
 
@@ -46,6 +47,14 @@ export default function App() {
               element={
                 <RequireRole>
                   <OrdersPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path={ROUTES.paymentSimulation}
+              element={
+                <RequireRole>
+                  <PaymentSimulationPage />
                 </RequireRole>
               }
             />

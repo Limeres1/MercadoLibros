@@ -14,13 +14,17 @@ import { deleteField, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/fir
 
 import { useToast } from '@/components/ui/Toast';
 import { FAVORITE_SHOWCASE_LIMIT, SIGNUP_ROLES } from '@/constants/statuses';
+import { STORAGE_KEYS } from '@/constants/storageKeys';
 import { useAuthModal } from '@/features/auth/AuthModalProvider';
 import { createSafeContext } from '@/lib/createSafeContext';
 import { getErrorMessage } from '@/lib/errors';
 import { withoutUndefined } from '@/lib/firestoreData';
+import { readJSON, writeJSON } from '@/lib/storage';
 import { auth } from '@/services/firebase';
 import { firestoreRefs } from '@/services/firestore';
 import { SignupRole, UserProfile, UserRole } from '@/types';
+
+export type SessionHint = Pick<UserProfile, 'id' | 'email' | 'displayName' | 'photoURL' | 'role'>;
 
 type EditableProfile = Pick<UserProfile, 'displayName' | 'photoURL' | 'bio' | 'location' | 'phone'>;
 
@@ -28,6 +32,8 @@ interface SessionContextValue {
   currentUser: UserProfile | null;
   currentRole: UserRole;
   isAuthLoading: boolean;
+  displayUser: SessionHint | null;
+  displayRole: UserRole;
   users: UserProfile[];
   loginWithEmail: (email: string, pass: string) => Promise<boolean>;
   loginWithGoogle: (role: SignupRole) => Promise<boolean>;
@@ -63,6 +69,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [sessionHint] = useState(() => readJSON<SessionHint | null>(STORAGE_KEYS.sessionHint, null));
   const showToastRef = useRef(showToast);
 
   useEffect(() => {
@@ -119,6 +126,25 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [isAdmin]);
 
   const currentRole: UserRole = currentUser ? currentUser.role : 'visitor';
+
+  useEffect(() => {
+    if (isAuthLoading) return;
+    writeJSON(
+      STORAGE_KEYS.sessionHint,
+      currentUser
+        ? {
+            id: currentUser.id,
+            email: currentUser.email,
+            displayName: currentUser.displayName,
+            photoURL: currentUser.photoURL,
+            role: currentUser.role,
+          }
+        : null,
+    );
+  }, [currentUser, isAuthLoading]);
+
+  const displayUser: SessionHint | null = currentUser ?? (isAuthLoading ? sessionHint : null);
+  const displayRole: UserRole = displayUser ? displayUser.role : 'visitor';
 
   const finishLogin = async (user: User, role: SignupRole, displayName?: string): Promise<boolean> => {
     const profileRef = firestoreRefs.user(user.uid);
@@ -224,6 +250,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         currentUser,
         currentRole,
         isAuthLoading,
+        displayUser,
+        displayRole,
         users,
         loginWithEmail,
         loginWithGoogle,

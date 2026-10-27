@@ -22,7 +22,7 @@ const SAMPLE_COVERS = [
 
 export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, onClose }) => {
   const { saveBook } = useSellerBooks();
-  const { getBookContent } = useBooks();
+  const { loadBookContent } = useBooks();
   const { showToast } = useToast();
 
   const [title, setTitle] = useState('');
@@ -56,7 +56,8 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
       setPublicationYear(String(bookToEdit.publicationYear));
       setStock(String(bookToEdit.stock || 10));
       setSampleText(bookToEdit.sampleText || '');
-      setFullContent(getBookContent(bookToEdit.id)?.text || '');
+      setFullContent('');
+      loadBookContent(bookToEdit.id).then(text => setFullContent(text ?? ''));
     } else {
       setTitle('');
       setAuthor('');
@@ -73,7 +74,7 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
       setSampleText('Fragmento del primer capítulo listo para lectura de muestra...');
       setFullContent('Capítulo 1\nEl texto completo de la obra disponible tras la compra.');
     }
-  }, [bookToEdit, getBookContent]);
+  }, [bookToEdit, loadBookContent]);
 
   const handleSubmit = async (submitForReview: boolean) => {
     if (!title.trim() || !author.trim() || !price) {

@@ -18,7 +18,7 @@ import {
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/PageLoader';
 import { ROUTES } from '@/constants/routes';
-import { useBook, useBooks } from '@/features/catalog/BooksProvider';
+import { useBook, useBookContent } from '@/features/catalog/BooksProvider';
 import { useLibrary } from '@/features/reader/LibraryProvider';
 import { useReaderSettings } from '@/features/reader/useReaderSettings';
 import { Book, Bookmark, LibraryItem } from '@/types';
@@ -47,8 +47,7 @@ export const ReaderPage: React.FC = () => {
 const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libraryItem }) => {
   const navigate = useNavigate();
   const { readerSettings, updateReaderSettings } = useReaderSettings();
-  const { getBookContent } = useBooks();
-  const contentText = getBookContent(book.id)?.text;
+  const { text: contentText } = useBookContent(book.id);
   const { updateReadingProgress, addBookmark, deleteBookmark } = useLibrary();
   const closeReader = useCallback(() => navigate(ROUTES.library), [navigate]);
 

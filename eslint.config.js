@@ -40,5 +40,9 @@ export default tseslint.config(
     files: ['api/**/*.ts', 'scripts/**/*.ts', 'tests/**/*.ts', 'vite.config.ts'],
     languageOptions: { globals: globals.node },
   },
+  {
+    files: ['api/**/*.ts'],
+    rules: { 'no-restricted-imports': 'off' },
+  },
   prettier,
 );
