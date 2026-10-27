@@ -8,6 +8,5 @@ export const STORAGE_KEYS = {
   favorites: `${PREFIX}favorites`,
   library: `${PREFIX}library`,
   orders: `${PREFIX}orders`,
-  cart: `${PREFIX}cart`,
   readerSettings: `${PREFIX}reader`,
 } as const;
