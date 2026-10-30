@@ -16,16 +16,26 @@ export function useSellerBooks() {
     const existing = bookData.id ? books.find(book => book.id === bookData.id) : undefined;
 
     if (existing) {
+      // CA-2: Editar un libro publicado lo vuelve a revisión (no se saltea la moderación)
       const status =
-        submitForReview || existing.status === 'published'
+        existing.status === 'published'
           ? 'pending_review'
-          : existing.status === 'rejected'
-            ? 'draft'
-            : existing.status;
+          : submitForReview
+            ? 'pending_review'
+            : existing.status === 'rejected'
+              ? 'draft'
+              : existing.status;
       if (!(await updateBook(existing.id, { ...bookData, status }))) return;
       if (bookData.condition === 'digital' && contentText !== undefined)
         await saveBookContent(existing.id, contentText);
-      showToast(submitForReview ? 'Libro enviado a revisión del administrador.' : 'Borrador actualizado.', 'success');
+      showToast(
+        existing.status === 'published'
+          ? 'Libro modificado. Vuelve a revisión del administrador antes de republicarse.'
+          : submitForReview
+            ? 'Libro enviado a revisión del administrador.'
+            : 'Borrador actualizado.',
+        'success',
+      );
       return;
     }
 
@@ -45,6 +55,8 @@ export function useSellerBooks() {
       coverUrl:
         bookData.coverUrl ||
         'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=600&q=80',
+      fileUrl: bookData.fileUrl,
+      sampleUrl: bookData.sampleUrl,
       sampleText: bookData.sampleText || 'Fragmento no disponible.',
       sellerId: currentUser.id,
       sellerName: currentUser.displayName,

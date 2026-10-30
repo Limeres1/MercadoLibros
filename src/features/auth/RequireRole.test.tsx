@@ -48,4 +48,36 @@ describe('RequireRole', () => {
     renderAs('admin');
     expect(screen.getByText('panel admin')).toBeInTheDocument();
   });
+
+  it('CA-3: shows 403 to a buyer accessing the seller route /vendedor', () => {
+    session.value = {
+      currentUser: INITIAL_USERS.find(candidate => candidate.role === 'buyer') ?? null,
+      isAuthLoading: false,
+    };
+    render(
+      <MemoryRouter>
+        <RequireRole roles={['seller', 'admin']}>
+          <p>Panel del Vendedor</p>
+        </RequireRole>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Acceso denegado (403)')).toBeInTheDocument();
+    expect(screen.queryByText('Panel del Vendedor')).not.toBeInTheDocument();
+  });
+
+  it('CA-3: allows an active seller to access the seller route /vendedor', () => {
+    session.value = {
+      currentUser: INITIAL_USERS.find(candidate => candidate.role === 'seller') ?? null,
+      isAuthLoading: false,
+    };
+    render(
+      <MemoryRouter>
+        <RequireRole roles={['seller', 'admin']}>
+          <p>Panel del Vendedor</p>
+        </RequireRole>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Panel del Vendedor')).toBeInTheDocument();
+    expect(screen.queryByText('Acceso denegado (403)')).not.toBeInTheDocument();
+  });
 });
