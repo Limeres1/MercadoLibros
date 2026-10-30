@@ -108,61 +108,61 @@ export const SellerDashboard: React.FC = () => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 bg-emerald-50/70 border border-emerald-200/60 rounded-2xl space-y-1">
-            <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Ingresos Facturados</span>
+            <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Ingresos Estimados</span>
             <p className="text-2xl font-black text-slate-900">${stats.revenue.toFixed(2)}</p>
-            <p className="text-[11px] text-emerald-600 font-medium">En el período seleccionado</p>
+            <p className="text-[10px] text-emerald-800/80 font-medium">Facturación del período seleccionado</p>
           </div>
 
-          <div className="p-4 bg-indigo-50/70 border border-indigo-200/60 rounded-2xl space-y-1">
-            <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider">Ejemplares Vendidos</span>
-            <p className="text-2xl font-black text-slate-900">{stats.salesCount} libros</p>
-            <p className="text-[11px] text-indigo-600 font-medium">Transacciones completadas</p>
+          <div className="p-4 bg-blue-50/70 border border-blue-200/60 rounded-2xl space-y-1">
+            <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">Ventas Concretadas</span>
+            <p className="text-2xl font-black text-slate-900">{stats.salesCount} u.</p>
+            <p className="text-[10px] text-blue-800/80 font-medium">Ejemplares vendidos</p>
           </div>
 
           <div className="p-4 bg-amber-50/70 border border-amber-200/60 rounded-2xl space-y-1">
-            <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Libros Publicados</span>
-            <p className="text-2xl font-black text-slate-900">{stats.publishedCount} títulos</p>
-            <p className="text-[11px] text-amber-600 font-medium">Disponibles en catálogo público</p>
+            <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">En Revisión</span>
+            <p className="text-2xl font-black text-slate-900">{stats.pendingCount}</p>
+            <p className="text-[10px] text-amber-800/80 font-medium">Esperando aprobación de admin</p>
           </div>
 
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
-            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-              En Revisión / Borradores
-            </span>
-            <p className="text-2xl font-black text-slate-900">{stats.pendingCount + stats.draftCount}</p>
-            <p className="text-[11px] text-slate-500 font-medium">
-              {stats.pendingCount} en revisión, {stats.draftCount} borradores
-            </p>
+          <div className="p-4 bg-purple-50/70 border border-purple-200/60 rounded-2xl space-y-1">
+            <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">Activos en Catálogo</span>
+            <p className="text-2xl font-black text-slate-900">{stats.publishedCount}</p>
+            <p className="text-[10px] text-purple-800/80 font-medium">Disponibles para compra pública</p>
           </div>
         </div>
       </div>
 
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-bold text-slate-900">Gestión de Publicaciones Propias</h3>
-            <p className="text-xs text-slate-500">
-              Monitorea el estado de revisión, motivos de rechazo y disponibilidad de cada obra
-            </p>
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-emerald-600" />
+            <h2 className="text-base font-bold text-slate-900">Mis Publicaciones</h2>
+            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">
+              {sellerBooks.length}
+            </span>
           </div>
         </div>
 
         {sellerBooks.length === 0 ? (
           <div className="p-12 text-center space-y-3">
-            <BookOpen className="w-12 h-12 text-slate-300 mx-auto" />
-            <p className="text-sm font-bold text-slate-700">Aún no has publicado ningún libro</p>
-            <p className="text-xs text-slate-400 max-w-xs mx-auto">
-              Presiona el botón "Publicar Nuevo Libro" para subir tu primera ficha.
-            </p>
+            <p className="text-slate-500 text-sm">Aún no has cargado ningún libro a la plataforma.</p>
+            <button
+              onClick={() => setEditor({ book: null })}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Publicar tu primer libro</span>
+            </button>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50 border-b border-slate-100 text-[11px] text-slate-500 uppercase tracking-wider font-semibold">
+            <table className="w-full text-left text-xs text-slate-600">
+              <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-100 font-semibold">
                 <tr>
                   <th className="px-6 py-3.5">Libro</th>
                   <th className="px-6 py-3.5">Precio</th>
-                  <th className="px-6 py-3.5">Estado de Revisión</th>
+                  <th className="px-6 py-3.5">Estado</th>
                   <th className="px-6 py-3.5">Ventas</th>
                   <th className="px-6 py-3.5 text-right">Acciones</th>
                 </tr>
@@ -240,7 +240,7 @@ export const SellerDashboard: React.FC = () => {
 
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        {book.status === 'draft' && (
+                        {(book.status === 'draft' || book.status === 'rejected') && (
                           <button
                             onClick={() => handleSendDraftForReview(book)}
                             className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold transition-colors"
