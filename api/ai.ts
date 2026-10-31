@@ -1,10 +1,11 @@
 import { GoogleGenAI } from '@google/genai';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
-const GEMINI_TIMEOUT_MS = 20_000;
-const DEFAULT_MODEL = 'gemini-3.8-flash';
-const FALLBACK_MODEL = 'gemini-3.6-flash';
-const RETRYABLE_STATUSES = [429, 500, 503];
+const GEMINI_TIMEOUT_MS = 15_000;
+const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+const FALLBACK_MODEL = 'gemini-3.8-flash';
+const COMPATIBLE_FALLBACK_MODEL = 'gemini-2.5-flash';
+const RETRYABLE_STATUSES = [404, 500, 503];
 const FIREBASE_JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
 const FIREBASE_ISSUER = 'https://securetoken.google.com/';
 const MAX_PROMPT_LENGTH = 8000;
@@ -81,7 +82,7 @@ export async function POST(request: Request): Promise<Response> {
     apiKey,
     httpOptions: { timeout: GEMINI_TIMEOUT_MS, retryOptions: { attempts: 1 } },
   });
-  const models = [...new Set([process.env.GEMINI_MODEL || DEFAULT_MODEL, FALLBACK_MODEL])];
+  const models = [...new Set([process.env.GEMINI_MODEL || DEFAULT_MODEL, FALLBACK_MODEL, COMPATIBLE_FALLBACK_MODEL])];
   for (const model of models) {
     try {
       const response = await gemini.models.generateContent({
@@ -90,12 +91,15 @@ export async function POST(request: Request): Promise<Response> {
         config: {
           systemInstruction: body.systemInstruction,
           responseMimeType: body.json ? 'application/json' : undefined,
+          maxOutputTokens: 512,
         },
       });
       if (response.text) return jsonResponse({ text: response.text });
+      console.warn(`Gemini returned an empty response (${model})`);
     } catch (error) {
-      console.error(`Gemini request failed (${model})`, error);
       const status = (error as { status?: number }).status;
+      console.error(`Gemini request failed (${model}, status ${status ?? 'unknown'})`);
+      if (status === 429) return jsonResponse({ error: AI_ERRORS.rateLimited }, 429);
       if (status && !RETRYABLE_STATUSES.includes(status)) break;
     }
   }

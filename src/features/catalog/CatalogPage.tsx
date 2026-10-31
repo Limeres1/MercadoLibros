@@ -7,10 +7,12 @@ import { BOOK_GENRES, CATALOG_SORT_LABELS, CatalogSort, DEFAULT_CATALOG_SORT } f
 import { CATALOG_PARAMS, CatalogParam } from '@/constants/routes';
 import { BOOK_CONDITION_LABELS } from '@/constants/statuses';
 import { BookCard, BookCardSkeleton } from '@/features/catalog/BookCard';
+import { BookRecommendations } from '@/features/catalog/BookRecommendations';
 import { countActiveFilters, readCatalogFilters } from '@/features/catalog/catalogFilters';
 import { CatalogFiltersPanel } from '@/features/catalog/CatalogFiltersPanel';
 import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
 import { useCatalogBooks, useCatalogPriceCeiling } from '@/features/catalog/useCatalogBooks';
+import { usePublishedCatalog } from '@/features/catalog/usePublishedCatalog';
 import { useLibrary } from '@/features/reader/LibraryProvider';
 import { useCart } from '@/features/shop/CartProvider';
 import { formatPrice } from '@/lib/format';
@@ -26,6 +28,11 @@ export const CatalogPage: React.FC = () => {
 
   const filters = useMemo(() => readCatalogFilters(searchParams), [searchParams]);
   const { books: results, total, isLoading, isLoadingMore, hasMore, error, loadMore } = useCatalogBooks(filters);
+  const {
+    books: publishedBooks,
+    isLoading: isPublishedCatalogLoading,
+    error: publishedCatalogError,
+  } = usePublishedCatalog();
   const priceCeiling = useCatalogPriceCeiling();
   const sentinelRef = useRef<HTMLDivElement>(null);
   const activeFilterCount = countActiveFilters(filters);
@@ -157,6 +164,12 @@ export const CatalogPage: React.FC = () => {
           </ul>
         </nav>
       }
+
+      <BookRecommendations
+        books={publishedBooks}
+        isCatalogLoading={isPublishedCatalogLoading}
+        catalogError={publishedCatalogError}
+      />
 
       <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
         <aside
