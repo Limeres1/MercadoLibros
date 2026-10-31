@@ -4,7 +4,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { STORAGE_KEYS } from '@/constants/storageKeys';
 import { useReaderSettings } from '@/features/reader/useReaderSettings';
 
-describe('reader font size persistence', () => {
+describe('reader settings persistence', () => {
+  it.each(['light', 'sepia', 'dark'] as const)('restores the %s theme after reopening', theme => {
+    const first = renderHook(() => useReaderSettings());
+    act(() => first.result.current.updateReaderSettings({ theme }));
+    first.unmount();
+    const second = renderHook(() => useReaderSettings());
+    expect(second.result.current.readerSettings.theme).toBe(theme);
+  });
+
+  it.each(['unknown', null, 42, {}])('recovers from an invalid saved theme %j', theme => {
+    localStorage.setItem(STORAGE_KEYS.readerSettings, JSON.stringify({ theme, fontSize: 22 }));
+    const { result } = renderHook(() => useReaderSettings());
+    expect(result.current.readerSettings).toMatchObject({ theme: 'sepia', fontSize: 22 });
+  });
+
   it.each([
     [null, 18],
     [[], 18],

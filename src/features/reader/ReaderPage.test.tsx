@@ -56,6 +56,22 @@ beforeEach(() => {
 });
 
 describe('full text and page navigation', () => {
+  it.each(['Claro', 'Sepia', 'Noche'])(
+    'selects and restores the %s theme without changing the reading position',
+    name => {
+      const view = renderReader();
+      fireEvent.click(screen.getByTitle('Personalizar Lector: Temas y Tamaño de Letra'));
+      fireEvent.click(screen.getByRole('button', { name }));
+      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getAllByRole('button', { pressed: true })).toHaveLength(1);
+      expect(state.updateProgress).not.toHaveBeenCalled();
+      view.unmount();
+      renderReader();
+      fireEvent.click(screen.getByTitle('Personalizar Lector: Temas y Tamaño de Letra'));
+      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'true');
+    },
+  );
+
   it('changes the rendered font size with buttons and slider, and restores it after reopening', () => {
     const view = renderReader();
     fireEvent.click(screen.getByTitle('Personalizar Lector: Temas y Tamaño de Letra'));

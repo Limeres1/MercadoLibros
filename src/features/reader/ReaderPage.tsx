@@ -177,7 +177,10 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
   const progressPercentage = Math.round((currentPage / totalPages) * 100);
 
   return (
-    <div className={`fixed inset-0 z-50 flex flex-col ${themeClasses} transition-colors duration-200`}>
+    <div
+      data-reader-theme={readerSettings.theme}
+      className={`fixed inset-0 z-50 flex flex-col ${themeClasses} transition-colors duration-200`}
+    >
       <header
         className={`px-4 sm:px-6 py-3 flex items-center justify-between shadow-2xs backdrop-blur-md ${headerThemeClasses} select-none`}
       >
@@ -246,24 +249,30 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
       </header>
 
       {showSettings && (
-        <div className="absolute top-16 right-4 sm:right-6 w-80 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
+        <div
+          className={`absolute top-16 right-4 sm:right-6 w-80 ${themeClasses} rounded-2xl shadow-2xl border p-5 z-50 animate-in fade-in slide-in-from-top-2 duration-150`}
+        >
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 reader-dark:border-slate-800 mb-4">
             <h4 className="font-bold text-sm flex items-center gap-2">
               <Type className="w-4 h-4 text-amber-600" />
               <span>Personalización de Lectura</span>
             </h4>
-            <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-600">
+            <button
+              onClick={() => setShowSettings(false)}
+              className="text-slate-400 hover:text-slate-600 reader-dark:hover:text-slate-200"
+            >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           <div className="mb-4">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">
+            <label className="text-xs font-semibold text-slate-500 reader-dark:text-slate-400 uppercase tracking-wider block mb-2">
               Tema visual
             </label>
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => updateReaderSettings({ theme: 'light' })}
+                aria-pressed={readerSettings.theme === 'light'}
                 className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border text-xs font-medium transition-all ${
                   readerSettings.theme === 'light'
                     ? 'border-amber-500 bg-amber-50/50 text-slate-900 ring-2 ring-amber-500/20'
@@ -276,6 +285,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
 
               <button
                 onClick={() => updateReaderSettings({ theme: 'sepia' })}
+                aria-pressed={readerSettings.theme === 'sepia'}
                 className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border text-xs font-medium transition-all ${
                   readerSettings.theme === 'sepia'
                     ? 'border-amber-600 bg-[#F4E8D0] text-[#4A3B2C] ring-2 ring-amber-600/20'
@@ -288,6 +298,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
 
               <button
                 onClick={() => updateReaderSettings({ theme: 'dark' })}
+                aria-pressed={readerSettings.theme === 'dark'}
                 className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border text-xs font-medium transition-all ${
                   readerSettings.theme === 'dark'
                     ? 'border-amber-500 bg-slate-800 text-white ring-2 ring-amber-500/20'
@@ -304,7 +315,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
             <div className="flex justify-between items-center mb-2">
               <label
                 htmlFor="reader-font-size"
-                className="text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                className="text-xs font-semibold text-slate-500 reader-dark:text-slate-400 uppercase tracking-wider"
               >
                 Tamaño de letra
               </label>
@@ -315,7 +326,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
                 aria-label="Reducir tamaño de letra"
                 disabled={readerSettings.fontSize <= READER_FONT_SIZE.min}
                 onClick={() => updateReaderSettings({ fontSize: readerSettings.fontSize - READER_FONT_SIZE.step })}
-                className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="w-8 h-8 rounded-lg border border-slate-200 reader-dark:border-slate-700 flex items-center justify-center font-bold text-xs hover:bg-slate-100 reader-dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 A-
               </button>
@@ -334,7 +345,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
                 aria-label="Aumentar tamaño de letra"
                 disabled={readerSettings.fontSize >= READER_FONT_SIZE.max}
                 onClick={() => updateReaderSettings({ fontSize: readerSettings.fontSize + READER_FONT_SIZE.step })}
-                className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center font-bold text-base hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="w-8 h-8 rounded-lg border border-slate-200 reader-dark:border-slate-700 flex items-center justify-center font-bold text-base hover:bg-slate-100 reader-dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 A+
               </button>
@@ -342,7 +353,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
           </div>
 
           <div className="mb-4">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">
+            <label className="text-xs font-semibold text-slate-500 reader-dark:text-slate-400 uppercase tracking-wider block mb-2">
               Tipografía
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -350,8 +361,8 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
                 onClick={() => updateReaderSettings({ fontFamily: 'serif' })}
                 className={`p-2 rounded-xl border text-xs font-serif transition-all ${
                   readerSettings.fontFamily === 'serif'
-                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 font-bold'
-                    : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                    ? 'border-amber-500 bg-amber-50 reader-dark:bg-amber-950/40 text-amber-800 reader-dark:text-amber-200 font-bold'
+                    : 'border-slate-200 reader-dark:border-slate-700 hover:bg-slate-50 reader-dark:hover:bg-slate-800'
                 }`}
               >
                 Serif (Editorial)
@@ -360,8 +371,8 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
                 onClick={() => updateReaderSettings({ fontFamily: 'sans' })}
                 className={`p-2 rounded-xl border text-xs font-sans transition-all ${
                   readerSettings.fontFamily === 'sans'
-                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 font-bold'
-                    : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                    ? 'border-amber-500 bg-amber-50 reader-dark:bg-amber-950/40 text-amber-800 reader-dark:text-amber-200 font-bold'
+                    : 'border-slate-200 reader-dark:border-slate-700 hover:bg-slate-50 reader-dark:hover:bg-slate-800'
                 }`}
               >
                 Sans (Moderna)
@@ -370,7 +381,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">
+            <label className="text-xs font-semibold text-slate-500 reader-dark:text-slate-400 uppercase tracking-wider block mb-2">
               Interlineado
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -380,8 +391,8 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
                   onClick={() => updateReaderSettings({ lineHeight: lh })}
                   className={`p-1.5 rounded-lg border text-xs capitalize transition-all ${
                     readerSettings.lineHeight === lh
-                      ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-800 font-bold'
-                      : 'border-slate-200 dark:border-slate-700'
+                      ? 'border-amber-500 bg-amber-50 reader-dark:bg-amber-950/40 text-amber-800 reader-dark:text-amber-200 font-bold'
+                      : 'border-slate-200 reader-dark:border-slate-700'
                   }`}
                 >
                   {lh === 'normal' ? 'Normal' : lh === 'relaxed' ? 'Cómodo' : 'Amplio'}
@@ -393,20 +404,25 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
       )}
 
       {showBookmarksList && (
-        <div className="absolute top-16 right-4 sm:right-6 w-88 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
+        <div
+          className={`absolute top-16 right-4 sm:right-6 w-88 ${themeClasses} rounded-2xl shadow-2xl border p-5 z-50 animate-in fade-in slide-in-from-top-2 duration-150`}
+        >
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 reader-dark:border-slate-800 mb-3">
             <h4 className="font-bold text-sm flex items-center gap-2">
               <BookmarkIcon className="w-4 h-4 text-amber-600" />
               <span>Marcadores y Notas</span>
             </h4>
-            <button onClick={() => setShowBookmarksList(false)} className="text-slate-400 hover:text-slate-600">
+            <button
+              onClick={() => setShowBookmarksList(false)}
+              className="text-slate-400 hover:text-slate-600 reader-dark:hover:text-slate-200"
+            >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           <form
             onSubmit={handleCreateBookmark}
-            className="mb-4 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700"
+            className="mb-4 bg-slate-50 reader-dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 reader-dark:border-slate-700"
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-amber-600">Marcador en Página {currentPage}</span>
@@ -416,14 +432,14 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
               placeholder="Título del marcador (opcional)"
               value={newBookmarkTitle}
               onChange={event => setNewBookmarkTitle(event.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg mb-2 outline-none focus:border-amber-500"
+              className="w-full px-2.5 py-1.5 text-xs bg-white reader-dark:bg-slate-800 border border-slate-200 reader-dark:border-slate-700 rounded-lg mb-2 outline-none focus:border-amber-500"
             />
             <textarea
               placeholder="Nota personal de lectura..."
               rows={2}
               value={newBookmarkNote}
               onChange={event => setNewBookmarkNote(event.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg mb-2 outline-none focus:border-amber-500 resize-none"
+              className="w-full px-2.5 py-1.5 text-xs bg-white reader-dark:bg-slate-800 border border-slate-200 reader-dark:border-slate-700 rounded-lg mb-2 outline-none focus:border-amber-500 resize-none"
             />
             <button
               type="submit"
@@ -436,14 +452,14 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
 
           <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
             {currentBookmarks.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-4">
+              <p className="text-xs text-slate-500 reader-dark:text-slate-400 text-center py-4">
                 No tienes marcadores guardados aún en este libro.
               </p>
             ) : (
               currentBookmarks.map(bm => (
                 <div
                   key={bm.id}
-                  className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors flex items-start justify-between gap-2"
+                  className="p-2.5 rounded-xl border border-slate-200 reader-dark:border-slate-700 hover:bg-slate-50 reader-dark:hover:bg-slate-800/60 transition-colors flex items-start justify-between gap-2"
                 >
                   <div
                     onClick={() => {
@@ -453,12 +469,14 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
                     className="flex-1 cursor-pointer"
                   >
                     <div className="flex items-center gap-1.5 mb-1">
-                      <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 font-bold text-[10px]">
+                      <span className="px-1.5 py-0.5 rounded bg-amber-100 reader-dark:bg-amber-900/60 text-amber-800 reader-dark:text-amber-200 font-bold text-[10px]">
                         Pág {bm.page}
                       </span>
-                      <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">{bm.title}</p>
+                      <p className="text-xs font-semibold text-slate-900 reader-dark:text-white truncate">{bm.title}</p>
                     </div>
-                    {bm.note && <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">"{bm.note}"</p>}
+                    {bm.note && (
+                      <p className="text-[11px] text-slate-500 reader-dark:text-slate-400 italic">"{bm.note}"</p>
+                    )}
                   </div>
                   <button
                     onClick={() => deleteBookmark(book.id, bm.id)}
@@ -513,7 +531,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
             max={totalPages}
             value={currentPage}
             onChange={event => handlePageChange(Number(event.target.value))}
-            className="w-full accent-amber-600 cursor-pointer h-1.5 bg-slate-300 dark:bg-slate-700 rounded-lg"
+            className="w-full accent-amber-600 cursor-pointer h-1.5 bg-slate-300 reader-dark:bg-slate-700 rounded-lg"
           />
           <span className="text-xs opacity-75 font-mono">{totalPages}</span>
         </div>

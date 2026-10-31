@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { READER_FONT_SIZE } from '@/constants/reader';
+import { READER_THEMES } from '@/constants/statuses';
 import { STORAGE_KEYS } from '@/constants/storageKeys';
 import { readJSON, writeJSON } from '@/lib/storage';
 import { ReaderSettings } from '@/types';
@@ -22,7 +23,8 @@ function normalizeSettings(value: unknown): ReaderSettings {
           Math.max(READER_FONT_SIZE.min, Math.round(size / READER_FONT_SIZE.step) * READER_FONT_SIZE.step),
         )
       : READER_FONT_SIZE.default;
-  return { ...DEFAULT_SETTINGS, ...saved, fontSize };
+  const theme = saved.theme && READER_THEMES.includes(saved.theme) ? saved.theme : DEFAULT_SETTINGS.theme;
+  return { ...DEFAULT_SETTINGS, ...saved, fontSize, theme };
 }
 
 export function useReaderSettings() {
