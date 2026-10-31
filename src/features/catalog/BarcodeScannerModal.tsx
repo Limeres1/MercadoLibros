@@ -8,11 +8,8 @@ import { useToast } from '@/components/ui/Toast';
 import { paths } from '@/constants/routes';
 import { useBooks } from '@/features/catalog/BooksProvider';
 import { isbnToken } from '@/lib/searchTokens';
+import { BarcodeDecoder, createBarcodeDecoder } from '@/services/barcodeDecoder';
 import { firestoreRefs } from '@/services/firestore';
-
-interface BarcodeDetectorConstructor {
-  new (options: { formats: string[] }): { detect: (source: HTMLVideoElement) => Promise<{ rawValue: string }[]> };
-}
 
 export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { rememberBooks } = useBooks();
@@ -30,6 +27,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
   const requestRef = useRef(0);
   const startingRef = useRef(false);
   const navigationTimerRef = useRef<number | undefined>(undefined);
+  const decoderRef = useRef<BarcodeDecoder | null>(null);
 
   const intervalRef = useRef<number | undefined>(undefined);
   const onDetectedRef = useRef<(code: string) => void>(() => undefined);
@@ -41,6 +39,8 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
     intervalRef.current = undefined;
     window.clearTimeout(navigationTimerRef.current);
     navigationTimerRef.current = undefined;
+    decoderRef.current?.dispose();
+    decoderRef.current = null;
     if (videoRef.current) {
       videoRef.current.pause();
       videoRef.current.srcObject = null;
@@ -88,28 +88,28 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
       setCameraStarting(false);
       startingRef.current = false;
 
-      const Detector = (window as unknown as { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector;
-      if (Detector) {
-        const barcodeDetector = new Detector({ formats: ['ean_13', 'ean_8', 'upc_a', 'code_128', 'code_39'] });
-        let isDetecting = false;
-        intervalRef.current = window.setInterval(async () => {
-          if (!mountedRef.current || requestId !== requestRef.current || isDetecting || video.readyState !== 4) return;
-          isDetecting = true;
-          const barcodes = await barcodeDetector.detect(video).catch(() => []);
-          isDetecting = false;
-          if (!mountedRef.current || requestId !== requestRef.current) return;
-          if (barcodes.length > 0) {
-            window.clearInterval(intervalRef.current);
-            onDetectedRef.current(barcodes[0].rawValue);
-          }
-        }, 500);
+      const decoder = await createBarcodeDecoder();
+      if (!mountedRef.current || requestId !== requestRef.current) {
+        decoder.dispose();
+        return;
       }
+      decoderRef.current = decoder;
+      let isDetecting = false;
+      intervalRef.current = window.setInterval(async () => {
+        if (!mountedRef.current || requestId !== requestRef.current || isDetecting || video.readyState < 2) return;
+        isDetecting = true;
+        const code = await decoder.detect(video).catch(() => null);
+        isDetecting = false;
+        if (!mountedRef.current || requestId !== requestRef.current) return;
+        if (code) {
+          window.clearInterval(intervalRef.current);
+          onDetectedRef.current(code);
+        }
+      }, 500);
     } catch {
       if (!mountedRef.current || requestId !== requestRef.current) return;
       stopCamera();
-      setCameraError(
-        'No se pudo acceder a la cámara. Puedes ingresar el código ISBN o probar con los códigos de ejemplo.',
-      );
+      setCameraError('No se pudo iniciar la cámara o el escáner. Podés ingresar el ISBN manualmente o reintentar.');
     }
   }, [stopCamera]);
 

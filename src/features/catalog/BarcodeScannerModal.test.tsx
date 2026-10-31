@@ -9,6 +9,9 @@ const fake = vi.hoisted(() => ({
   getDocs: vi.fn(),
   rememberBooks: vi.fn(),
   showToast: vi.fn(),
+  createDecoder: vi.fn(),
+  detect: vi.fn(),
+  dispose: vi.fn(),
 }));
 vi.mock('react-router', async importOriginal => ({
   ...(await importOriginal<typeof import('react-router')>()),
@@ -17,6 +20,7 @@ vi.mock('react-router', async importOriginal => ({
 vi.mock('@/features/catalog/BooksProvider', () => ({ useBooks: () => ({ rememberBooks: fake.rememberBooks }) }));
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ showToast: fake.showToast }) }));
 vi.mock('@/services/firestore', () => ({ firestoreRefs: { books: () => 'books' } }));
+vi.mock('@/services/barcodeDecoder', () => ({ createBarcodeDecoder: () => fake.createDecoder() }));
 vi.mock('firebase/firestore', () => ({
   getDocs: (...args: unknown[]) => fake.getDocs(...args),
   query: (...args: unknown[]) => args,
@@ -51,6 +55,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   fake.getDocs.mockReset().mockResolvedValue({ docs: [] });
   getUserMedia.mockReset().mockResolvedValue(mediaStream().stream);
+  fake.detect.mockReset().mockResolvedValue(null);
+  fake.dispose.mockClear();
+  fake.createDecoder.mockReset().mockResolvedValue({ detect: fake.detect, dispose: fake.dispose });
   vi.stubGlobal('navigator', Object.assign(Object.create(navigator), { mediaDevices: { getUserMedia } }));
   vi.stubGlobal('BarcodeDetector', undefined);
   play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
@@ -142,14 +149,9 @@ describe('scanner camera lifecycle', () => {
 
   it('ignores a pending detector result after close and does not search or navigate', async () => {
     vi.useFakeTimers();
-    const detection = deferred<{ rawValue: string }[]>();
+    const detection = deferred<string | null>();
     const detect = vi.fn(() => detection.promise);
-    vi.stubGlobal(
-      'BarcodeDetector',
-      class {
-        detect = detect;
-      },
-    );
+    fake.createDecoder.mockResolvedValue({ detect, dispose: fake.dispose });
     renderScanner();
     await act(async () => {});
     const video = screen.getByLabelText('Vista previa de la cámara');
@@ -159,12 +161,25 @@ describe('scanner camera lifecycle', () => {
     });
     expect(detect).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar escáner' }));
-    await act(async () => detection.resolve([{ rawValue: '9780307474728' }]));
+    await act(async () => detection.resolve('9780307474728'));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
     expect(fake.getDocs).not.toHaveBeenCalled();
     expect(fake.navigate).not.toHaveBeenCalled();
+    expect(fake.dispose).toHaveBeenCalled();
+  });
+
+  it('disposes a decoder that finishes loading after the scanner closes', async () => {
+    const decoder = deferred<{ detect: typeof fake.detect; dispose: typeof fake.dispose }>();
+    fake.createDecoder.mockReturnValue(decoder.promise);
+    renderScanner();
+    await waitFor(() => expect(fake.createDecoder).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar escáner' }));
+    await act(async () => decoder.resolve({ detect: fake.detect, dispose: fake.dispose }));
+    expect(fake.dispose).toHaveBeenCalledTimes(1);
+    expect(fake.detect).not.toHaveBeenCalled();
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
   });
 
   it('cancels delayed navigation when the modal closes after a successful lookup', async () => {
