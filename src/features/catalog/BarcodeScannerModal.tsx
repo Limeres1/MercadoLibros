@@ -198,7 +198,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
           playsInline
           muted
           aria-label="Vista previa de la cámara"
-          className={cameraActive ? 'w-full h-full object-cover' : 'hidden'}
+          className={cameraActive ? 'w-full h-full object-contain' : 'hidden'}
         />
         {cameraActive ? (
           <>
