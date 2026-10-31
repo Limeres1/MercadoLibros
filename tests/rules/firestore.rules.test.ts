@@ -170,6 +170,16 @@ describe('books', () => {
 });
 
 describe('book contents', () => {
+  it('C4 CA-3: guests and non-buyers can read the free sample but cannot fetch full content', async () => {
+    const contexts = [testEnv.unauthenticatedContext().firestore(), dbAs(OTHER_BUYER)];
+    for (const database of contexts) {
+      const preview = await assertSucceeds(getDoc(doc(database, COLLECTIONS.books, BOOK)));
+      expect(preview.data()?.sampleText).toBe('Muestra');
+      expect(preview.data()?.text).toBeUndefined();
+      await assertFails(getDoc(doc(database, COLLECTIONS.bookContents, BOOK)));
+    }
+  });
+
   it('C3 CA-3: a purchased book stays readable after withdrawal, only for its owner', async () => {
     await assertSucceeds(updateDoc(doc(dbAs(SELLER), COLLECTIONS.books, BOOK), { status: 'withdrawn' }));
     await assertSucceeds(getDoc(doc(dbAs(BUYER), COLLECTIONS.books, BOOK)));

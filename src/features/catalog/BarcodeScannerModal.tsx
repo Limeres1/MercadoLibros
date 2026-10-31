@@ -7,12 +7,9 @@ import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { paths } from '@/constants/routes';
 import { useBooks } from '@/features/catalog/BooksProvider';
-import { isbnToken } from '@/lib/searchTokens';
+import { isbnSearchVariants, normalizeIsbn } from '@/lib/isbn';
+import { BarcodeDecoder, createBarcodeDecoder } from '@/services/barcodeDecoder';
 import { firestoreRefs } from '@/services/firestore';
-
-interface BarcodeDetectorConstructor {
-  new (options: { formats: string[] }): { detect: (source: HTMLVideoElement) => Promise<{ rawValue: string }[]> };
-}
 
 export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { rememberBooks } = useBooks();
@@ -20,92 +17,163 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
   const navigate = useNavigate();
 
   const [cameraActive, setCameraActive] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualIsbn, setManualIsbn] = useState('');
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  const lookupPendingRef = useRef(false);
   const [scannedResult, setScannedResult] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const mountedRef = useRef(false);
+  const requestRef = useRef(0);
+  const startingRef = useRef(false);
+  const navigationTimerRef = useRef<number | undefined>(undefined);
+  const decoderRef = useRef<BarcodeDecoder | null>(null);
 
   const intervalRef = useRef<number | undefined>(undefined);
   const onDetectedRef = useRef<(code: string) => void>(() => undefined);
 
   const stopCamera = useCallback(() => {
+    requestRef.current += 1;
+    startingRef.current = false;
     window.clearInterval(intervalRef.current);
+    intervalRef.current = undefined;
+    window.clearTimeout(navigationTimerRef.current);
+    navigationTimerRef.current = undefined;
+    decoderRef.current?.dispose();
+    decoderRef.current = null;
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+    }
     streamRef.current?.getTracks().forEach(track => track.stop());
     streamRef.current = null;
-    setCameraActive(false);
+    if (mountedRef.current) {
+      setCameraActive(false);
+      setCameraStarting(false);
+    }
   }, []);
 
+  const closeScanner = useCallback(() => {
+    stopCamera();
+    mountedRef.current = false;
+    onClose();
+  }, [onClose, stopCamera]);
+
   const startCamera = useCallback(async () => {
+    if (!mountedRef.current || startingRef.current) return;
+    stopCamera();
+    const requestId = ++requestRef.current;
+    startingRef.current = true;
+    setCameraStarting(true);
     setCameraError(null);
     setScannedResult(null);
+    setLookupError(null);
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('La cámara no es soportada en este entorno o navegador.');
       }
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      if (!mountedRef.current || requestId !== requestRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
+      const video = videoRef.current;
+      if (!video) throw new Error('Video element unavailable');
+      video.srcObject = stream;
+      await video.play();
+      if (!mountedRef.current || requestId !== requestRef.current) {
+        return;
       }
       setCameraActive(true);
+      setCameraStarting(false);
+      startingRef.current = false;
 
-      const Detector = (window as unknown as { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector;
-      if (Detector) {
-        const barcodeDetector = new Detector({ formats: ['ean_13', 'ean_8', 'upc_a', 'code_128', 'code_39'] });
-        intervalRef.current = window.setInterval(async () => {
-          if (videoRef.current?.readyState !== 4) return;
-          const barcodes = await barcodeDetector.detect(videoRef.current).catch(() => []);
-          if (barcodes.length > 0) {
-            window.clearInterval(intervalRef.current);
-            onDetectedRef.current(barcodes[0].rawValue);
-          }
-        }, 500);
+      const decoder = await createBarcodeDecoder();
+      if (!mountedRef.current || requestId !== requestRef.current) {
+        decoder.dispose();
+        return;
       }
+      decoderRef.current = decoder;
+      let isDetecting = false;
+      intervalRef.current = window.setInterval(async () => {
+        if (!mountedRef.current || requestId !== requestRef.current || isDetecting || video.readyState < 2) return;
+        isDetecting = true;
+        const code = await decoder.detect(video).catch(() => null);
+        isDetecting = false;
+        if (!mountedRef.current || requestId !== requestRef.current) return;
+        if (code) {
+          window.clearInterval(intervalRef.current);
+          onDetectedRef.current(code);
+        }
+      }, 500);
     } catch {
-      setCameraError(
-        'No se pudo acceder a la cámara. Puedes ingresar el código ISBN o probar con los códigos de ejemplo.',
-      );
-      setCameraActive(false);
+      if (!mountedRef.current || requestId !== requestRef.current) return;
+      stopCamera();
+      setCameraError('No se pudo iniciar la cámara o el escáner. Podés ingresar el ISBN manualmente o reintentar.');
     }
-  }, []);
+  }, [stopCamera]);
 
   useEffect(() => {
+    mountedRef.current = true;
     startCamera();
-    return stopCamera;
+    return () => {
+      mountedRef.current = false;
+      stopCamera();
+    };
   }, [startCamera, stopCamera]);
 
   const findBookByCode = async (code: string) => {
-    const token = isbnToken(code);
-    if (!token) return undefined;
     const snapshot = await getDocs(
       query(
         firestoreRefs.books(),
         where('status', '==', 'published'),
-        where('searchTokens', 'array-contains', token),
+        where('searchTokens', 'array-contains-any', isbnSearchVariants(code)),
         limit(1),
       ),
-    ).catch(() => null);
-    return snapshot?.docs[0]?.data();
+    );
+    return snapshot.docs[0]?.data();
   };
 
-  const handleCodeDetected = async (code: string) => {
+  const handleCodeDetected = async (value: string) => {
+    if (!mountedRef.current || lookupPendingRef.current) return;
+    const code = normalizeIsbn(value);
+    if (!code) {
+      setLookupError('Ingresá un ISBN válido de 10 o 13 caracteres. Revisá los dígitos del número.');
+      return;
+    }
+    lookupPendingRef.current = true;
+    setSearching(true);
+    setLookupError(null);
     setScannedResult(code);
     stopCamera();
 
-    const matchedBook = await findBookByCode(code);
-    if (matchedBook) {
-      rememberBooks([matchedBook]);
-      showToast(`¡Libro detectado: "${matchedBook.title}"!`, 'success');
-      setTimeout(() => {
-        onClose();
-        navigate(paths.book(matchedBook.id));
-      }, 700);
-    } else {
-      showToast(`El código ${code} no coincide con ningún libro publicado.`, 'info');
-      onClose();
-      navigate(paths.home(code));
+    try {
+      const matchedBook = await findBookByCode(code);
+      if (!mountedRef.current) return;
+      if (matchedBook) {
+        rememberBooks([matchedBook]);
+        showToast(`¡Libro detectado: "${matchedBook.title}"!`, 'success');
+        navigationTimerRef.current = window.setTimeout(() => {
+          if (!mountedRef.current) return;
+          closeScanner();
+          navigate(paths.book(matchedBook.id));
+        }, 700);
+      } else {
+        setScannedResult(null);
+        setLookupError(`No encontramos un libro publicado con el ISBN ${code}. Revisá el número o probá con otro.`);
+        lookupPendingRef.current = false;
+        setSearching(false);
+      }
+    } catch {
+      if (!mountedRef.current) return;
+      setScannedResult(null);
+      setLookupError('No pudimos consultar el catálogo. Revisá tu conexión e intentá de nuevo.');
+      lookupPendingRef.current = false;
+      setSearching(false);
     }
   };
 
@@ -115,12 +183,11 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
 
   const handleManualSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!manualIsbn.trim()) return;
     handleCodeDetected(manualIsbn.trim());
   };
 
   return (
-    <Modal onClose={onClose} labelledBy="scanner-title" className="max-w-md bg-white rounded-2xl border-slate-200">
+    <Modal onClose={closeScanner} labelledBy="scanner-title" className="max-w-md bg-white rounded-2xl border-slate-200">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/80">
         <div className="flex items-center gap-2.5">
           <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
@@ -134,7 +201,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
           </div>
         </div>
         <button
-          onClick={onClose}
+          onClick={closeScanner}
           aria-label="Cerrar escáner"
           className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
         >
@@ -143,9 +210,16 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
       </div>
 
       <div className="relative bg-slate-900 aspect-4/3 flex items-center justify-center overflow-hidden">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          aria-label="Vista previa de la cámara"
+          className={cameraActive ? 'w-full h-full object-contain' : 'hidden'}
+        />
         {cameraActive ? (
           <>
-            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none p-8">
               <div className="w-64 h-36 border-2 border-amber-400 rounded-xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]">
                 <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-amber-400 rounded-tl-sm"></div>
@@ -174,9 +248,10 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
             )}
             <button
               onClick={startCamera}
+              disabled={cameraStarting || searching}
               className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold transition-colors"
             >
-              Reintentar Cámara
+              {cameraStarting ? 'Iniciando cámara…' : 'Reintentar Cámara'}
             </button>
           </div>
         )}
@@ -196,17 +271,30 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
             type="text"
             placeholder="Ingresa el ISBN manualmente (ej: 978-0307474728)"
             value={manualIsbn}
-            onChange={event => setManualIsbn(event.target.value)}
+            aria-label="ISBN"
+            aria-invalid={lookupError ? true : undefined}
+            aria-describedby={lookupError ? 'isbn-error' : undefined}
+            disabled={searching}
+            onChange={event => {
+              setManualIsbn(event.target.value);
+              setLookupError(null);
+            }}
             className="flex-1 px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
           />
           <button
             type="submit"
+            disabled={searching}
             className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors"
           >
-            <span>Buscar</span>
+            <span>{searching ? 'Buscando…' : 'Buscar'}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </form>
+        {lookupError && (
+          <p id="isbn-error" role="alert" className="text-xs text-rose-700">
+            {lookupError}
+          </p>
+        )}
 
         <div>
           <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
@@ -216,6 +304,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
           <div className="grid grid-cols-2 gap-2 text-left">
             <button
               type="button"
+              disabled={searching}
               onClick={() => handleCodeDetected('978-0307474728')}
               className="p-2 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg text-xs transition-colors group"
             >
@@ -225,6 +314,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
 
             <button
               type="button"
+              disabled={searching}
               onClick={() => handleCodeDetected('978-0307950925')}
               className="p-2 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg text-xs transition-colors group"
             >
@@ -234,6 +324,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
 
             <button
               type="button"
+              disabled={searching}
               onClick={() => handleCodeDetected('978-8420471891')}
               className="p-2 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg text-xs transition-colors group"
             >
@@ -243,6 +334,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
 
             <button
               type="button"
+              disabled={searching}
               onClick={() => handleCodeDetected('978-0156013864')}
               className="p-2 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg text-xs transition-colors group"
             >

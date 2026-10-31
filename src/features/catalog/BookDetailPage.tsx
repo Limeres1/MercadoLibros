@@ -80,6 +80,7 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
   const [isSampleOpen, setIsSampleOpen] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
 
+  const hasSample = Boolean(book.sampleText?.trim());
   const isFav = isFavorite(book.id);
   const soldOut = isOutOfStock(book);
   const { hasPurchased } = useLibrary();
@@ -160,11 +161,12 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
           </div>
           <button
             type="button"
+            disabled={!hasSample}
             onClick={() => setIsSampleOpen(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-800 hover:border-amber-500 hover:text-amber-800"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-800 enabled:hover:border-amber-500 enabled:hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <BookOpen className="h-4 w-4" aria-hidden="true" />
-            Leer muestra gratis
+            {hasSample ? 'Leer muestra gratis' : 'Muestra no disponible'}
           </button>
         </div>
 
