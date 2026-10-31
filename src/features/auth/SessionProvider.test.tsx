@@ -16,6 +16,7 @@ const firebase = vi.hoisted(() => ({
   signOut: vi.fn(),
   getDoc: vi.fn(),
   setDoc: vi.fn(),
+  updateDoc: vi.fn(),
 }));
 
 vi.mock('@/services/firebase', () => ({ auth: {} }));
@@ -42,7 +43,7 @@ vi.mock('firebase/firestore', () => ({
   },
   getDoc: firebase.getDoc,
   setDoc: firebase.setDoc,
-  updateDoc: vi.fn(),
+  updateDoc: firebase.updateDoc,
   deleteField: vi.fn(),
 }));
 
@@ -152,5 +153,29 @@ describe('SessionProvider', () => {
         'Si existe una cuenta con nadie@test.com, te enviamos un correo para restablecer la contraseña.',
       ),
     ).toBeInTheDocument();
+  });
+
+  it('rejects showcase updates with more than four books', async () => {
+    firebase.updateDoc.mockResolvedValue(undefined);
+    renderSession();
+    act(() => firebase.authListener(firebaseUser));
+    act(() =>
+      firebase.profileListener(
+        existingDoc({
+          id: 'uid-1',
+          email: 'lectora@test.com',
+          displayName: 'Laura',
+          role: 'buyer',
+          createdAt: new Date().toISOString(),
+        }),
+      ),
+    );
+
+    await act(async () => {
+      await session.updateFavoriteBookIds(['book-1', 'book-2', 'book-3', 'book-4', 'book-5']);
+    });
+
+    expect(firebase.updateDoc).not.toHaveBeenCalled();
+    expect(screen.getByText('Podés destacar hasta 4 libros en tu perfil.')).toBeInTheDocument();
   });
 });

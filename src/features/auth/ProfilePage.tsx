@@ -3,6 +3,12 @@ import { useNavigate } from 'react-router';
 import { ArrowLeft, Award, MapPin, Phone, Plus, Trash2, User } from 'lucide-react';
 
 import { FAVORITE_SHOWCASE_LIMIT } from '@/constants/statuses';
+import {
+  ProfileField,
+  ProfileFormValues,
+  ProfileValidationErrors,
+  validateProfile,
+} from '@/features/auth/profileValidation';
 import { useSession } from '@/features/auth/SessionProvider';
 import { useBooksByIds } from '@/features/catalog/BooksProvider';
 import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
@@ -24,6 +30,7 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
   const [location, setLocation] = useState(currentUser.location || '');
   const [phone, setPhone] = useState(currentUser.phone || '');
   const [isSelectingBook, setIsSelectingBook] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<ProfileValidationErrors>({});
 
   const selectedFavIds = currentUser.favoriteBookIds || [];
   const { books } = useBooksByIds([...selectedFavIds, ...favorites]);
@@ -34,12 +41,24 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
 
   const handleSaveProfile = async (event: React.FormEvent) => {
     event.preventDefault();
+    const values: ProfileFormValues = { displayName, photoURL, bio, location, phone };
+    const errors = validateProfile(values);
+    setValidationErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     await updateUserProfile({
-      displayName,
-      photoURL,
-      bio,
-      location,
-      phone,
+      displayName: displayName.trim(),
+      photoURL: photoURL.trim(),
+      bio: bio.trim(),
+      location: location.trim(),
+      phone: phone.trim(),
+    });
+  };
+
+  const clearValidationError = (field: ProfileField) => {
+    setValidationErrors(previous => {
+      const next = { ...previous };
+      delete next[field];
+      return next;
     });
   };
 
@@ -79,7 +98,7 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
         </div>
 
         <div className="flex-1 p-4 sm:p-6 space-y-6">
-          <form onSubmit={handleSaveProfile} className="space-y-4">
+          <form onSubmit={handleSaveProfile} noValidate className="space-y-4">
             <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
               <img
                 src={
@@ -91,28 +110,57 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
               />
               <div className="flex-1 w-full space-y-2">
                 <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">URL de Foto / Avatar</label>
+                  <label htmlFor="profile-photo" className="text-xs font-semibold text-slate-600 block mb-1">
+                    URL de Foto / Avatar
+                  </label>
                   <input
-                    type="url"
+                    id="profile-photo"
+                    type="text"
+                    inputMode="url"
                     value={photoURL}
-                    onChange={event => setPhotoURL(event.target.value)}
+                    maxLength={1000}
+                    aria-invalid={Boolean(validationErrors.photoURL)}
+                    aria-describedby={validationErrors.photoURL ? 'profile-photo-error' : undefined}
+                    onChange={event => {
+                      setPhotoURL(event.target.value);
+                      clearValidationError('photoURL');
+                    }}
                     placeholder="https://..."
                     className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-amber-500"
                   />
+                  {validationErrors.photoURL && (
+                    <p id="profile-photo-error" role="alert" className="mt-1 text-xs text-rose-700">
+                      {validationErrors.photoURL}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Nombre Completo</label>
+                <label htmlFor="profile-name" className="text-xs font-semibold text-slate-600 block mb-1">
+                  Nombre Completo
+                </label>
                 <input
+                  id="profile-name"
                   type="text"
-                  required
                   value={displayName}
-                  onChange={event => setDisplayName(event.target.value)}
+                  maxLength={80}
+                  aria-required="true"
+                  aria-invalid={Boolean(validationErrors.displayName)}
+                  aria-describedby={validationErrors.displayName ? 'profile-name-error' : undefined}
+                  onChange={event => {
+                    setDisplayName(event.target.value);
+                    clearValidationError('displayName');
+                  }}
                   className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-amber-500"
                 />
+                {validationErrors.displayName && (
+                  <p id="profile-name-error" role="alert" className="mt-1 text-xs text-rose-700">
+                    {validationErrors.displayName}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -128,43 +176,85 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Ubicación / Ciudad</label>
+                <label htmlFor="profile-location" className="text-xs font-semibold text-slate-600 block mb-1">
+                  Ubicación / Ciudad
+                </label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-3 w-3.5 h-3.5 text-slate-400" />
                   <input
+                    id="profile-location"
                     type="text"
                     value={location}
-                    onChange={event => setLocation(event.target.value)}
+                    maxLength={120}
+                    aria-invalid={Boolean(validationErrors.location)}
+                    aria-describedby={validationErrors.location ? 'profile-location-error' : undefined}
+                    onChange={event => {
+                      setLocation(event.target.value);
+                      clearValidationError('location');
+                    }}
                     placeholder="Ej: Buenos Aires, Argentina"
                     className="w-full pl-9 p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-amber-500"
                   />
                 </div>
+                {validationErrors.location && (
+                  <p id="profile-location-error" role="alert" className="mt-1 text-xs text-rose-700">
+                    {validationErrors.location}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Teléfono de Contacto</label>
+                <label htmlFor="profile-phone" className="text-xs font-semibold text-slate-600 block mb-1">
+                  Teléfono de Contacto
+                </label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-3 w-3.5 h-3.5 text-slate-400" />
                   <input
+                    id="profile-phone"
                     type="text"
                     value={phone}
-                    onChange={event => setPhone(event.target.value)}
+                    maxLength={40}
+                    aria-invalid={Boolean(validationErrors.phone)}
+                    aria-describedby={validationErrors.phone ? 'profile-phone-error' : undefined}
+                    onChange={event => {
+                      setPhone(event.target.value);
+                      clearValidationError('phone');
+                    }}
                     placeholder="+54 11 ..."
                     className="w-full pl-9 p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-amber-500"
                   />
                 </div>
+                {validationErrors.phone && (
+                  <p id="profile-phone-error" role="alert" className="mt-1 text-xs text-rose-700">
+                    {validationErrors.phone}
+                  </p>
+                )}
               </div>
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">Biografía o Resumen de Lectura</label>
+              <label htmlFor="profile-bio" className="text-xs font-semibold text-slate-600 block mb-1">
+                Biografía o Resumen de Lectura
+              </label>
               <textarea
+                id="profile-bio"
                 rows={2}
                 value={bio}
-                onChange={event => setBio(event.target.value)}
+                maxLength={500}
+                aria-invalid={Boolean(validationErrors.bio)}
+                aria-describedby={validationErrors.bio ? 'profile-bio-error' : undefined}
+                onChange={event => {
+                  setBio(event.target.value);
+                  clearValidationError('bio');
+                }}
                 placeholder="Cuéntale a la comunidad tus géneros predilectos, autores favoritos..."
                 className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-amber-500 resize-none"
               />
+              {validationErrors.bio && (
+                <p id="profile-bio-error" role="alert" className="mt-1 text-xs text-rose-700">
+                  {validationErrors.bio}
+                </p>
+              )}
             </div>
 
             <div className="flex justify-end pt-2">

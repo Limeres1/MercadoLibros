@@ -221,9 +221,13 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateFavoriteBookIds = async (bookIds: string[]) => {
     if (!currentUser) return;
+    if (bookIds.length > FAVORITE_SHOWCASE_LIMIT) {
+      showToast(`Podés destacar hasta ${FAVORITE_SHOWCASE_LIMIT} libros en tu perfil.`, 'error');
+      return;
+    }
     try {
       await updateDoc(firestoreRefs.user(currentUser.id), {
-        favoriteBookIds: bookIds.slice(0, FAVORITE_SHOWCASE_LIMIT),
+        favoriteBookIds: bookIds,
       });
       showToast('Tus libros favoritos del perfil han sido actualizados.', 'success');
     } catch (error) {
