@@ -42,6 +42,8 @@ beforeEach(async () => {
   await db.recursiveDelete(db.collection('users'));
   await db.recursiveDelete(db.collection('books'));
   await db.recursiveDelete(db.collection('orders'));
+  await db.recursiveDelete(db.collection('bookContents'));
+  await db.collection('bookContents').doc(DIGITAL).set({ text: 'Uno.\n\nDos.\n\nTres.\n\nCuatro.\n\nCinco.' });
   await userRef().set({ displayName: 'Lectora', email: 'lectora@test.com', role: 'buyer', isBlocked: false });
   await db
     .collection('books')
@@ -96,6 +98,7 @@ describe('payment confirmation', () => {
     const order = (await db.collection('orders').doc(id).get()).data();
     expect(order).toMatchObject({ status: 'paid', paymentId: 'MP-1' });
     expect((await userRef().collection('library').doc(DIGITAL).get()).exists).toBe(true);
+    expect((await userRef().collection('library').doc(DIGITAL).get()).get('totalPages')).toBe(3);
     expect((await userRef().collection('library').doc(PHYSICAL).get()).exists).toBe(false);
     expect((await userRef().collection('purchases').doc(PHYSICAL).get()).exists).toBe(true);
     expect((await db.collection('books').doc(PHYSICAL).get()).data()).toMatchObject({ stock: 0, salesCount: 2 });

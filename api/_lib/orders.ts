@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 
 import { COLLECTIONS, USER_SUBCOLLECTIONS } from '../../src/constants/firestore.js';
 import { MAX_CART_QUANTITY, SHIPPING_COST } from '../../src/constants/statuses.js';
+import { paginateReaderText } from '../../src/lib/readerPagination.js';
 
 export class CheckoutError extends Error {}
 
@@ -141,10 +142,12 @@ export async function applyPaymentOutcome(
     const bookRefs = items.map(item => db.collection(COLLECTIONS.books).doc(item.bookId));
     const libraryRefs = items.map(item => userRef.collection(USER_SUBCOLLECTIONS.library).doc(item.bookId));
     const purchaseRefs = items.map(item => userRef.collection(USER_SUBCOLLECTIONS.purchases).doc(item.bookId));
-    const [books, libraryItems, purchases] = await Promise.all([
+    const contentRefs = items.map(item => db.collection(COLLECTIONS.bookContents).doc(item.bookId));
+    const [books, libraryItems, purchases, contents] = await Promise.all([
       transaction.getAll(...bookRefs),
       transaction.getAll(...libraryRefs),
       transaction.getAll(...purchaseRefs),
+      transaction.getAll(...contentRefs),
     ]);
 
     const paidAt = new Date().toISOString();
@@ -161,6 +164,7 @@ export async function applyPaymentOutcome(
         transaction.set(purchaseRefs[index], { orderId, purchasedAt: paidAt });
       }
       if (item.condition === 'digital' && !libraryItems[index].exists) {
+        const text = contents[index].get('text');
         transaction.set(libraryRefs[index], {
           userId: order.buyerId,
           bookId: item.bookId,
@@ -170,7 +174,7 @@ export async function applyPaymentOutcome(
           coverUrl: item.coverUrl,
           purchasedAt: paidAt,
           lastReadPage: 0,
-          totalPages: Math.max(1, Number(book?.pages) || 1),
+          totalPages: Math.max(1, paginateReaderText(typeof text === 'string' ? text : '').length),
           bookmarks: [],
         });
       }

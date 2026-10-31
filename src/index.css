@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+@custom-variant reader-dark (&:where([data-reader-theme='dark'], [data-reader-theme='dark'] *));
+
 @layer base {
   body {
     font-family:
