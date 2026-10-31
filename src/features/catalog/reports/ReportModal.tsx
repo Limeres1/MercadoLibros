@@ -11,16 +11,19 @@ interface ReportModalProps {
 
 export const ReportModal: React.FC<ReportModalProps> = ({ target: reportTarget, onClose }) => {
   const { createReport } = useReports();
-  const [reason, setReason] = useState('Contenido inapropiado o engañoso');
+  const [reason, setReason] = useState('Contenido inapropiado o violento');
   const [details, setDetails] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (isSubmitting) return;
     setIsSubmitting(true);
-    await createReport(reportTarget, reason, details.trim() || 'Sin detalles adicionales');
-    setIsSubmitting(false);
-    onClose();
+    try {
+      if (await createReport(reportTarget, reason, details.trim())) onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -53,8 +56,12 @@ export const ReportModal: React.FC<ReportModalProps> = ({ target: reportTarget, 
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-slate-700 block mb-1.5">Motivo principal de la denuncia *</label>
+          <label htmlFor="report-reason" className="text-xs font-semibold text-slate-700 block mb-1.5">
+            Motivo principal de la denuncia *
+          </label>
           <select
+            id="report-reason"
+            required
             value={reason}
             onChange={event => setReason(event.target.value)}
             className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-red-500 text-slate-800"
@@ -69,11 +76,13 @@ export const ReportModal: React.FC<ReportModalProps> = ({ target: reportTarget, 
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-slate-700 block mb-1.5">
+          <label htmlFor="report-details" className="text-xs font-semibold text-slate-700 block mb-1.5">
             Detalles o justificación (opcional)
           </label>
           <textarea
+            id="report-details"
             rows={3}
+            maxLength={2000}
             value={details}
             onChange={event => setDetails(event.target.value)}
             placeholder="Explica detalladamente por qué este contenido incumple las normas de la comunidad..."

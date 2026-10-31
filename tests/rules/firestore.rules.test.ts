@@ -356,6 +356,13 @@ describe('reports and audit log', () => {
 
   it('users report, only admins resolve', async () => {
     await assertSucceeds(setDoc(doc(dbAs(BUYER), COLLECTIONS.reports, reportId), report));
+    await assertFails(setDoc(doc(dbAs(BUYER), COLLECTIONS.reports, reportId), report));
+    await assertSucceeds(
+      setDoc(doc(dbAs(OTHER_BUYER), COLLECTIONS.reports, docIds.report(OTHER_BUYER, 'book', BOOK)), {
+        ...report,
+        reporterId: OTHER_BUYER,
+      }),
+    );
     await assertFails(updateDoc(doc(dbAs(BUYER), COLLECTIONS.reports, reportId), { status: 'resolved' }));
     await assertSucceeds(
       updateDoc(doc(dbAs(ADMIN), COLLECTIONS.reports, reportId), {
@@ -364,6 +371,10 @@ describe('reports and audit log', () => {
         resolvedAt: NOW,
       }),
     );
+  });
+
+  it('visitors cannot create reports', async () => {
+    await assertFails(setDoc(doc(testEnv.unauthenticatedContext().firestore(), COLLECTIONS.reports, reportId), report));
   });
 
   it('blocked users cannot report', async () => {

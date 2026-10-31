@@ -47,11 +47,12 @@ export function useModeration() {
       }
     }
 
-    setReportStatus(
+    const updated = await setReportStatus(
       reportId,
       action === 'dismiss' ? 'dismissed' : 'resolved',
       action === 'dismiss' ? 'Desestimada por falta de pruebas' : 'Contenido retirado por infracción',
     );
+    if (!updated) return;
     showToast(`Denuncia procesada: ${action === 'dismiss' ? 'Desestimada' : 'Contenido dado de baja'}`, 'success');
   };
 

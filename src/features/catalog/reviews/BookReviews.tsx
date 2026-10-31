@@ -215,9 +215,10 @@ const ReviewItem: React.FC<ReviewItemProps> = ({ review, isOwn, canModerate, onE
               type="button"
               onClick={onReport}
               aria-label={`Denunciar la reseña de ${review.userName}`}
-              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-50 hover:text-red-700"
+              className="inline-flex items-center gap-1 rounded-md p-1.5 text-xs text-slate-500 hover:bg-slate-50 hover:text-red-700"
             >
               <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+              <span>Denunciar</span>
             </button>
           )}
         </div>
@@ -337,15 +338,12 @@ export const BookReviews: React.FC<BookReviewsProps> = ({ book, onReport }) => {
               canModerate={currentUser?.role === 'admin'}
               onEdit={(rating, comment) => editReview(review.id, rating, comment)}
               onDelete={() => removeReview(review.id)}
-              onReport={
-                currentUser
-                  ? () =>
-                      onReport({
-                        type: 'review',
-                        id: review.id,
-                        title: `Reseña de ${review.userName} sobre ${book.title}`,
-                      })
-                  : undefined
+              onReport={() =>
+                onReport({
+                  type: 'review',
+                  id: review.id,
+                  title: `Reseña de ${review.userName} sobre ${book.title}`,
+                })
               }
             />
           ))}
