@@ -26,10 +26,10 @@ import { Book, Bookmark, LibraryItem } from '@/types';
 export const ReaderPage: React.FC = () => {
   const { bookId } = useParams();
   const { book, isLoading } = useBook(bookId);
-  const { getItem } = useLibrary();
+  const { getItem, isLoading: isLibraryLoading } = useLibrary();
   const libraryItem = bookId ? getItem(bookId) : undefined;
 
-  if (isLoading && !book) return <PageLoader />;
+  if (isLibraryLoading || (isLoading && !book)) return <PageLoader />;
 
   if (!book || !libraryItem) {
     return (

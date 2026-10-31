@@ -170,10 +170,23 @@ describe('books', () => {
 });
 
 describe('book contents', () => {
+  it('C3 CA-3: a purchased book stays readable after withdrawal, only for its owner', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs(SELLER), COLLECTIONS.books, BOOK), { status: 'withdrawn' }));
+    await assertSucceeds(getDoc(doc(dbAs(BUYER), COLLECTIONS.books, BOOK)));
+    await assertSucceeds(getDoc(doc(dbAs(BUYER), COLLECTIONS.bookContents, BOOK)));
+    await assertFails(getDoc(doc(dbAs(OTHER_BUYER), COLLECTIONS.books, BOOK)));
+    await assertFails(getDoc(doc(dbAs(OTHER_BUYER), COLLECTIONS.bookContents, BOOK)));
+    const visitor = testEnv.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(visitor, COLLECTIONS.books, BOOK)));
+    await assertFails(getDoc(doc(visitor, COLLECTIONS.bookContents, BOOK)));
+  });
+
   it('only the owner of the book in the library, the seller or the admin read the full text', async () => {
     await assertSucceeds(getDoc(doc(dbAs(BUYER), COLLECTIONS.bookContents, BOOK)));
     await assertSucceeds(getDoc(doc(dbAs(SELLER), COLLECTIONS.bookContents, BOOK)));
+    await assertSucceeds(getDoc(doc(dbAs(ADMIN), COLLECTIONS.bookContents, BOOK)));
     await assertFails(getDoc(doc(dbAs(OTHER_BUYER), COLLECTIONS.bookContents, BOOK)));
+    await assertFails(getDoc(doc(testEnv.unauthenticatedContext().firestore(), COLLECTIONS.bookContents, BOOK)));
   });
 });
 
