@@ -1,5 +1,5 @@
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { INITIAL_BOOKS, INITIAL_LIBRARY } from '@/data/initialData';
@@ -11,6 +11,9 @@ const state = vi.hoisted(() => ({
   item: undefined as LibraryItem | undefined,
   bookLoading: false,
   libraryLoading: false,
+  contentLoading: false,
+  text: 'Texto completo comprado.' as string | null,
+  updateProgress: vi.fn(),
   loadContent: vi.fn(),
 }));
 
@@ -18,7 +21,7 @@ vi.mock('@/features/catalog/BooksProvider', () => ({
   useBook: () => ({ book: state.book, isLoading: state.bookLoading }),
   useBookContent: () => {
     state.loadContent();
-    return { text: 'Texto completo comprado.', isLoading: false };
+    return { text: state.text, isLoading: state.contentLoading };
   },
 }));
 
@@ -26,7 +29,7 @@ vi.mock('@/features/reader/LibraryProvider', () => ({
   useLibrary: () => ({
     getItem: (bookId: string) => (state.item?.bookId === bookId ? state.item : undefined),
     isLoading: state.libraryLoading,
-    updateReadingProgress: vi.fn(),
+    updateReadingProgress: state.updateProgress,
     addBookmark: vi.fn(),
     deleteBookmark: vi.fn(),
   }),
@@ -46,7 +49,83 @@ beforeEach(() => {
   state.item = { ...INITIAL_LIBRARY[0], bookId: 'purchased-book', bookmarks: [] };
   state.bookLoading = false;
   state.libraryLoading = false;
+  state.contentLoading = false;
+  state.text = 'Texto completo comprado.';
+  state.updateProgress.mockClear();
   state.loadContent.mockClear();
+});
+
+describe('full text and page navigation', () => {
+  it('waits for full text without showing the free sample or saving a page', () => {
+    state.contentLoading = true;
+    state.text = null;
+    renderReader();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Página siguiente' })).not.toBeInTheDocument();
+    expect(screen.queryByText(state.book!.sampleText)).not.toBeInTheDocument();
+    expect(state.updateProgress).not.toHaveBeenCalled();
+  });
+
+  it.each([null, '', ' \n '])('shows an unavailable state for missing or empty full text (%s)', text => {
+    state.text = text;
+    renderReader();
+    expect(screen.getByText('No pudimos cargar el texto completo')).toBeInTheDocument();
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+    expect(screen.queryByText(state.book!.sampleText)).not.toBeInTheDocument();
+    expect(state.updateProgress).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Volver a la biblioteca' }));
+    expect(screen.queryByText('No pudimos cargar el texto completo')).not.toBeInTheDocument();
+  });
+
+  it('navigates all paragraphs with buttons and slider, respecting the first and last page', () => {
+    state.text = 'Párrafo uno.\n\nPárrafo dos.\n\nPárrafo tres.\n\nPárrafo cuatro.\n\nÚltimo párrafo.';
+    renderReader();
+    const previous = screen.getByRole('button', { name: 'Página anterior' });
+    const next = screen.getByRole('button', { name: 'Página siguiente' });
+    const slider = screen.getByRole('slider', { name: 'Página de lectura' });
+    expect(previous).toBeDisabled();
+    expect(slider).toHaveValue('1');
+    expect(screen.getByText(/Párrafo uno/)).toHaveTextContent('Párrafo dos.');
+    const main = screen.getByRole('main');
+    main.scrollTop = 200;
+    fireEvent.click(next);
+    expect(main.scrollTop).toBe(0);
+    expect(screen.getByText(/Párrafo tres/)).toHaveTextContent('Párrafo cuatro.');
+    expect(state.updateProgress).toHaveBeenLastCalledWith('purchased-book', 2);
+    fireEvent.change(slider, { target: { value: '3' } });
+    expect(screen.getByText('Último párrafo.')).toBeInTheDocument();
+    expect(next).toBeDisabled();
+    fireEvent.click(previous);
+    expect(slider).toHaveValue('2');
+  });
+
+  it('supports keyboard navigation without turning pages while editing a bookmark', () => {
+    state.text = 'Primero.\n\nSegundo.\n\nTercero.';
+    renderReader();
+    const slider = screen.getByRole('slider', { name: 'Página de lectura' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(slider).toHaveValue('2');
+    fireEvent.keyDown(window, { key: 'PageUp' });
+    expect(slider).toHaveValue('1');
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(slider).toHaveValue('1');
+    state.updateProgress.mockClear();
+    fireEvent.click(screen.getByTitle('Marcadores y notas'));
+    fireEvent.keyDown(screen.getByPlaceholderText('Título del marcador (opcional)'), { key: 'ArrowRight' });
+    fireEvent.keyDown(screen.getByPlaceholderText('Nota personal de lectura...'), { key: 'PageDown' });
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowRight', ctrlKey: true });
+    expect(slider).toHaveValue('1');
+    expect(state.updateProgress).not.toHaveBeenCalled();
+  });
+
+  it('clamps a saved position to the available full text without writing it back', () => {
+    state.item = { ...state.item!, lastReadPage: 100 };
+    state.text = 'Una sola página.';
+    renderReader();
+    expect(screen.getByRole('slider')).toHaveValue('1');
+    expect(state.updateProgress).not.toHaveBeenCalled();
+  });
 });
 
 describe('reader purchase access', () => {

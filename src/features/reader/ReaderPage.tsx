@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
   Bookmark as BookmarkIcon,
@@ -41,25 +41,52 @@ export const ReaderPage: React.FC = () => {
     );
   }
 
-  return <Reader book={book} libraryItem={libraryItem} />;
+  return <PurchasedReader key={book.id} book={book} libraryItem={libraryItem} />;
 };
 
-const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libraryItem }) => {
+const PurchasedReader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libraryItem }) => {
+  const { text, isLoading } = useBookContent(book.id);
+  const navigate = useNavigate();
+
+  if (isLoading) return <PageLoader />;
+
+  if (!text?.trim()) {
+    return (
+      <EmptyState
+        icon={BookOpen}
+        title="No pudimos cargar el texto completo"
+        description="Volvé a intentarlo desde tu biblioteca. Si el problema continúa, contactá al vendedor."
+        action={
+          <button onClick={() => navigate(ROUTES.library)} className="text-amber-700 font-semibold">
+            Volver a la biblioteca
+          </button>
+        }
+      />
+    );
+  }
+
+  return <Reader book={book} libraryItem={libraryItem} contentText={text} />;
+};
+
+const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: string }> = ({
+  book,
+  libraryItem,
+  contentText,
+}) => {
   const navigate = useNavigate();
   const { readerSettings, updateReaderSettings } = useReaderSettings();
-  const { text: contentText } = useBookContent(book.id);
   const { updateReadingProgress, addBookmark, deleteBookmark } = useLibrary();
   const closeReader = useCallback(() => navigate(ROUTES.library), [navigate]);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(10);
+  const contentRef = useRef<HTMLElement>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showBookmarksList, setShowBookmarksList] = useState(false);
   const [newBookmarkTitle, setNewBookmarkTitle] = useState('');
   const [newBookmarkNote, setNewBookmarkNote] = useState('');
 
   const pagesText = useMemo(() => {
-    const raw = contentText || book.sampleText || 'Contenido del libro.';
+    const raw = contentText;
     const paragraphs = raw.split(/\n\s*\n/).filter(paragraph => paragraph.trim().length > 0);
 
     const pages: string[] = [];
@@ -75,14 +102,17 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
 
     if (pages.length === 0) pages.push(raw);
     return pages;
-  }, [contentText, book.sampleText]);
+  }, [contentText]);
+
+  const totalPages = pagesText.length;
 
   useEffect(() => {
-    const count = Math.max(pagesText.length, 1);
-    setTotalPages(count);
+    setCurrentPage(Math.max(1, Math.min(libraryItem.lastReadPage || 1, totalPages)));
+  }, [libraryItem.lastReadPage, totalPages]);
 
-    setCurrentPage(Math.min(libraryItem.lastReadPage || 1, count));
-  }, [libraryItem.lastReadPage, pagesText]);
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [currentPage]);
 
   const handlePageChange = useCallback(
     (newPage: number) => {
@@ -95,9 +125,14 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable]')) return;
       if (event.key === 'ArrowRight' || event.key === 'PageDown') {
+        event.preventDefault();
         handlePageChange(currentPage + 1);
       } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+        event.preventDefault();
         handlePageChange(currentPage - 1);
       } else if (event.key === 'Escape') {
         closeReader();
@@ -427,7 +462,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
         </div>
       )}
 
-      <main className="flex-1 overflow-y-auto flex items-center justify-center p-4 sm:p-8">
+      <main ref={contentRef} className="flex-1 overflow-y-auto flex items-center justify-center p-4 sm:p-8">
         <div className="w-full max-w-2xl mx-auto flex flex-col justify-between min-h-[60vh]">
           <div
             style={{ fontSize: `${readerSettings.fontSize}px` }}
@@ -449,6 +484,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
       >
         <button
           onClick={() => handlePageChange(currentPage - 1)}
+          aria-label="Página anterior"
           disabled={currentPage <= 1}
           className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-current disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-80 text-xs font-medium transition-all"
         >
@@ -460,6 +496,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
           <span className="text-xs opacity-75 font-mono">1</span>
           <input
             type="range"
+            aria-label="Página de lectura"
             min="1"
             max={totalPages}
             value={currentPage}
@@ -471,6 +508,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libr
 
         <button
           onClick={() => handlePageChange(currentPage + 1)}
+          aria-label="Página siguiente"
           disabled={currentPage >= totalPages}
           className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-current disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-80 text-xs font-medium transition-all"
         >
