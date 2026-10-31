@@ -223,6 +223,7 @@ describe('favorites and library', () => {
   it('the owner saves reading progress but cannot add books to the library', async () => {
     await assertSucceeds(updateDoc(libraryDoc(BUYER, BOOK), { lastReadPage: 12 }));
     await assertFails(updateDoc(libraryDoc(BUYER, BOOK), { orderId: 'otro' }));
+    await assertFails(updateDoc(libraryDoc(BUYER, BOOK), { totalPages: 201 }));
     await assertFails(
       setDoc(libraryDoc(BUYER, DRAFT_BOOK), { userId: BUYER, bookId: DRAFT_BOOK, lastReadPage: 0, totalPages: 1 }),
     );

@@ -17,11 +17,14 @@ import {
 
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/PageLoader';
+import { API_ROUTES } from '@/constants/api';
 import { READER_FONT_SIZE } from '@/constants/reader';
 import { ROUTES } from '@/constants/routes';
 import { useBook, useBookContent } from '@/features/catalog/BooksProvider';
 import { useLibrary } from '@/features/reader/LibraryProvider';
 import { useReaderSettings } from '@/features/reader/useReaderSettings';
+import { paginateReaderText, readingProgress } from '@/lib/readerPagination';
+import { ApiError, postApi } from '@/services/api';
 import { Book, Bookmark, LibraryItem } from '@/types';
 
 export const ReaderPage: React.FC = () => {
@@ -48,6 +51,36 @@ export const ReaderPage: React.FC = () => {
 const PurchasedReader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ book, libraryItem }) => {
   const { text, isLoading } = useBookContent(book.id);
   const navigate = useNavigate();
+  const pageCount = useMemo(() => paginateReaderText(text || '').length, [text]);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncAttempt, setSyncAttempt] = useState(0);
+  const needsSync =
+    pageCount > 0 &&
+    (libraryItem.totalPages !== pageCount ||
+      !Number.isInteger(libraryItem.lastReadPage) ||
+      libraryItem.lastReadPage < 0 ||
+      libraryItem.lastReadPage > pageCount);
+
+  useEffect(() => {
+    if (isLoading || !needsSync) return;
+    let isActive = true;
+    setSyncError(null);
+    postApi<{ totalPages: number }>(API_ROUTES.readerSync, { bookId: book.id })
+      .then(result => {
+        if (isActive && result.totalPages !== pageCount) {
+          setSyncError('El texto del libro cambió. Volvé a abrirlo desde tu biblioteca.');
+        }
+      })
+      .catch(error => {
+        if (isActive)
+          setSyncError(
+            error instanceof ApiError ? error.message : 'No pudimos sincronizar las páginas. Intentá de nuevo.',
+          );
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [book.id, isLoading, needsSync, pageCount, syncAttempt]);
 
   if (isLoading) return <PageLoader />;
 
@@ -61,6 +94,27 @@ const PurchasedReader: React.FC<{ book: Book; libraryItem: LibraryItem }> = ({ b
           <button onClick={() => navigate(ROUTES.library)} className="text-amber-700 font-semibold">
             Volver a la biblioteca
           </button>
+        }
+      />
+    );
+  }
+
+  if (needsSync) {
+    if (!syncError) return <PageLoader />;
+    return (
+      <EmptyState
+        icon={BookOpen}
+        title="No pudimos preparar la lectura"
+        description={syncError}
+        action={
+          <div className="flex justify-center gap-4">
+            <button onClick={() => setSyncAttempt(attempt => attempt + 1)} className="text-amber-700 font-semibold">
+              Reintentar
+            </button>
+            <button onClick={() => navigate(ROUTES.library)} className="text-amber-700 font-semibold">
+              Volver a la biblioteca
+            </button>
+          </div>
         }
       />
     );
@@ -89,24 +143,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
   const [isSavingBookmark, setIsSavingBookmark] = useState(false);
   const [deletingBookmarkId, setDeletingBookmarkId] = useState<string | null>(null);
 
-  const pagesText = useMemo(() => {
-    const raw = contentText;
-    const paragraphs = raw.split(/\n\s*\n/).filter(paragraph => paragraph.trim().length > 0);
-
-    const pages: string[] = [];
-    let currentBatch: string[] = [];
-
-    paragraphs.forEach((paragraph, idx) => {
-      currentBatch.push(paragraph);
-      if (currentBatch.length >= 2 || idx === paragraphs.length - 1) {
-        pages.push(currentBatch.join('\n\n'));
-        currentBatch = [];
-      }
-    });
-
-    if (pages.length === 0) pages.push(raw);
-    return pages;
-  }, [contentText]);
+  const pagesText = useMemo(() => paginateReaderText(contentText), [contentText]);
 
   const totalPages = pagesText.length;
 
@@ -199,7 +236,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
     loose: 'leading-loose',
   }[readerSettings.lineHeight];
 
-  const progressPercentage = Math.round((currentPage / totalPages) * 100);
+  const progressPercentage = readingProgress(currentPage, totalPages).percent;
 
   return (
     <div
@@ -572,6 +609,9 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
             className="w-full accent-amber-600 cursor-pointer h-1.5 bg-slate-300 reader-dark:bg-slate-700 rounded-lg"
           />
           <span className="text-xs opacity-75 font-mono">{totalPages}</span>
+          <output aria-label="Progreso de lectura" className="text-xs font-mono">
+            {progressPercentage}%
+          </output>
         </div>
 
         <button

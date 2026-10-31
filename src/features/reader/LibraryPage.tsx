@@ -6,6 +6,7 @@ import { paths, ROUTES } from '@/constants/routes';
 import { useSession } from '@/features/auth/SessionProvider';
 import { useBooksByIds } from '@/features/catalog/BooksProvider';
 import { useLibrary } from '@/features/reader/LibraryProvider';
+import { readingProgress } from '@/lib/readerPagination';
 import { LibraryItem } from '@/types';
 
 export const LibraryPage: React.FC = () => {
@@ -75,9 +76,7 @@ export const LibraryPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {userLibraryItems.map(item => {
             const matchedBook = books.find(book => book.id === item.bookId);
-            const total = item.totalPages || 10;
-            const current = item.lastReadPage || 1;
-            const progress = Math.min(100, Math.round((current / total) * 100));
+            const { total, current, percent: progress } = readingProgress(item.lastReadPage, item.totalPages);
 
             return (
               <div

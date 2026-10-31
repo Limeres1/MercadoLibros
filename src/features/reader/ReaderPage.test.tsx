@@ -17,6 +17,12 @@ const state = vi.hoisted(() => ({
   addBookmark: vi.fn(),
   deleteBookmark: vi.fn(),
   loadContent: vi.fn(),
+  syncPages: vi.fn(),
+}));
+
+vi.mock('@/services/api', () => ({
+  postApi: (...args: unknown[]) => state.syncPages(...args),
+  ApiError: class extends Error {},
 }));
 
 vi.mock('@/features/catalog/BooksProvider', () => ({
@@ -49,12 +55,13 @@ const renderReader = () => render(readerRoute());
 
 beforeEach(() => {
   state.book = { ...INITIAL_BOOKS[0], id: 'purchased-book' };
-  state.item = { ...INITIAL_LIBRARY[0], bookId: 'purchased-book', bookmarks: [] };
+  state.item = { ...INITIAL_LIBRARY[0], bookId: 'purchased-book', bookmarks: [], totalPages: 1, lastReadPage: 1 };
   state.bookLoading = false;
   state.libraryLoading = false;
   state.contentLoading = false;
   state.text = 'Texto completo comprado.';
   state.updateProgress.mockClear();
+  state.syncPages.mockReset().mockResolvedValue({ totalPages: 1 });
   state.addBookmark.mockReset().mockResolvedValue(true);
   state.deleteBookmark.mockReset().mockResolvedValue(true);
   state.loadContent.mockClear();
@@ -99,6 +106,7 @@ describe('bookmark interactions', () => {
 
   it('opens a bookmark page and requests deletion of only that bookmark', async () => {
     state.text = 'Uno.\n\nDos.\n\nTres.';
+    state.item = { ...state.item!, totalPages: 2 };
     state.item = {
       ...state.item!,
       bookmarks: [{ id: 'scene', page: 2, title: 'Escena', createdAt: '2026-10-31T00:00:00Z' }],
@@ -115,7 +123,7 @@ describe('bookmark interactions', () => {
 
 describe('full text and page navigation', () => {
   it('keeps the chosen page when an older Firestore position arrives, then restores the saved page on reopen', () => {
-    state.item = { ...state.item!, lastReadPage: 1 };
+    state.item = { ...state.item!, lastReadPage: 1, totalPages: 3 };
     state.text = 'Uno.\n\nDos.\n\nTres.\n\nCuatro.\n\nCinco.';
     const view = renderReader();
     fireEvent.click(screen.getByRole('button', { name: 'Página siguiente' }));
@@ -196,6 +204,7 @@ describe('full text and page navigation', () => {
 
   it('navigates all paragraphs with buttons and slider, respecting the first and last page', () => {
     state.text = 'Párrafo uno.\n\nPárrafo dos.\n\nPárrafo tres.\n\nPárrafo cuatro.\n\nÚltimo párrafo.';
+    state.item = { ...state.item!, totalPages: 3 };
     renderReader();
     const previous = screen.getByRole('button', { name: 'Página anterior' });
     const next = screen.getByRole('button', { name: 'Página siguiente' });
@@ -208,9 +217,11 @@ describe('full text and page navigation', () => {
     fireEvent.click(next);
     expect(main.scrollTop).toBe(0);
     expect(screen.getByText(/Párrafo tres/)).toHaveTextContent('Párrafo cuatro.');
+    expect(screen.getByLabelText('Progreso de lectura')).toHaveTextContent('67%');
     expect(state.updateProgress).toHaveBeenLastCalledWith('purchased-book', 2);
     fireEvent.change(slider, { target: { value: '3' } });
     expect(screen.getByText('Último párrafo.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Progreso de lectura')).toHaveTextContent('100%');
     expect(next).toBeDisabled();
     fireEvent.click(previous);
     expect(slider).toHaveValue('2');
@@ -218,6 +229,7 @@ describe('full text and page navigation', () => {
 
   it('supports keyboard navigation without turning pages while editing a bookmark', () => {
     state.text = 'Primero.\n\nSegundo.\n\nTercero.';
+    state.item = { ...state.item!, totalPages: 2 };
     renderReader();
     const slider = screen.getByRole('slider', { name: 'Página de lectura' });
     fireEvent.keyDown(window, { key: 'ArrowRight' });
@@ -236,11 +248,24 @@ describe('full text and page navigation', () => {
     expect(state.updateProgress).not.toHaveBeenCalled();
   });
 
-  it('clamps a saved position to the available full text without writing it back', () => {
-    state.item = { ...state.item!, lastReadPage: 100 };
-    state.text = 'Una sola página.';
-    renderReader();
+  it('prepares an old library entry on the server before allowing progress writes', async () => {
+    state.item = { ...state.item!, totalPages: 200, lastReadPage: 100 };
+    const view = renderReader();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    await waitFor(() => expect(state.syncPages).toHaveBeenCalledWith('/api/reader/sync', { bookId: 'purchased-book' }));
+    expect(state.updateProgress).not.toHaveBeenCalled();
+    state.item = { ...state.item!, totalPages: 1, lastReadPage: 1 };
+    view.rerender(readerRoute());
     expect(screen.getByRole('slider')).toHaveValue('1');
+  });
+
+  it('shows a preparation error and lets the reader retry without writing invalid progress', async () => {
+    state.item = { ...state.item!, totalPages: 200 };
+    state.syncPages.mockRejectedValueOnce(new Error('offline'));
+    renderReader();
+    await waitFor(() => expect(screen.getByText('No pudimos preparar la lectura')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+    await waitFor(() => expect(state.syncPages).toHaveBeenCalledTimes(2));
     expect(state.updateProgress).not.toHaveBeenCalled();
   });
 });
@@ -255,7 +280,7 @@ describe('reader purchase access', () => {
     expect(state.loadContent).not.toHaveBeenCalled();
 
     state.libraryLoading = false;
-    state.item = { ...INITIAL_LIBRARY[0], bookId: 'purchased-book', bookmarks: [] };
+    state.item = { ...INITIAL_LIBRARY[0], bookId: 'purchased-book', bookmarks: [], totalPages: 1, lastReadPage: 1 };
     view.rerender(
       <MemoryRouter initialEntries={['/leer/purchased-book']}>
         <Routes>
