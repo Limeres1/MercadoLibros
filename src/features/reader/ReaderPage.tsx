@@ -80,6 +80,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
   const closeReader = useCallback(() => navigate(ROUTES.library), [navigate]);
 
   const [currentPage, setCurrentPage] = useState(1);
+  const hasNavigatedRef = useRef(false);
   const contentRef = useRef<HTMLElement>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showBookmarksList, setShowBookmarksList] = useState(false);
@@ -108,7 +109,11 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
   const totalPages = pagesText.length;
 
   useEffect(() => {
-    setCurrentPage(Math.max(1, Math.min(libraryItem.lastReadPage || 1, totalPages)));
+    if (!hasNavigatedRef.current) {
+      setCurrentPage(Math.max(1, Math.min(libraryItem.lastReadPage || 1, totalPages)));
+    } else {
+      setCurrentPage(page => Math.min(page, totalPages));
+    }
   }, [libraryItem.lastReadPage, totalPages]);
 
   useEffect(() => {
@@ -117,7 +122,8 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
 
   const handlePageChange = useCallback(
     (newPage: number) => {
-      if (newPage < 1 || newPage > totalPages) return;
+      if (!Number.isInteger(newPage) || newPage < 1 || newPage > totalPages) return;
+      hasNavigatedRef.current = true;
       setCurrentPage(newPage);
       updateReadingProgress(book.id, newPage);
     },

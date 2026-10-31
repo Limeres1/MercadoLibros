@@ -35,14 +35,15 @@ vi.mock('@/features/reader/LibraryProvider', () => ({
   }),
 }));
 
-const renderReader = () =>
-  render(
-    <MemoryRouter initialEntries={['/leer/purchased-book']}>
-      <Routes>
-        <Route path="/leer/:bookId" element={<ReaderPage />} />
-      </Routes>
-    </MemoryRouter>,
-  );
+const readerRoute = () => (
+  <MemoryRouter initialEntries={['/leer/purchased-book']}>
+    <Routes>
+      <Route path="/leer/:bookId" element={<ReaderPage />} />
+    </Routes>
+  </MemoryRouter>
+);
+
+const renderReader = () => render(readerRoute());
 
 beforeEach(() => {
   state.book = { ...INITIAL_BOOKS[0], id: 'purchased-book' };
@@ -56,6 +57,22 @@ beforeEach(() => {
 });
 
 describe('full text and page navigation', () => {
+  it('keeps the chosen page when an older Firestore position arrives, then restores the saved page on reopen', () => {
+    state.item = { ...state.item!, lastReadPage: 1 };
+    state.text = 'Uno.\n\nDos.\n\nTres.\n\nCuatro.\n\nCinco.';
+    const view = renderReader();
+    fireEvent.click(screen.getByRole('button', { name: 'Página siguiente' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Página siguiente' }));
+    expect(screen.getByRole('slider', { name: 'Página de lectura' })).toHaveValue('3');
+    state.item = { ...state.item!, lastReadPage: 2 };
+    view.rerender(readerRoute());
+    expect(screen.getByRole('slider', { name: 'Página de lectura' })).toHaveValue('3');
+    state.item = { ...state.item!, lastReadPage: 3 };
+    view.unmount();
+    renderReader();
+    expect(screen.getByRole('slider', { name: 'Página de lectura' })).toHaveValue('3');
+  });
+
   it.each(['Claro', 'Sepia', 'Noche'])(
     'selects and restores the %s theme without changing the reading position',
     name => {
