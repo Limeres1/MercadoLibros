@@ -20,23 +20,51 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
   const navigate = useNavigate();
 
   const [cameraActive, setCameraActive] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualIsbn, setManualIsbn] = useState('');
   const [scannedResult, setScannedResult] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const mountedRef = useRef(false);
+  const requestRef = useRef(0);
+  const startingRef = useRef(false);
+  const navigationTimerRef = useRef<number | undefined>(undefined);
 
   const intervalRef = useRef<number | undefined>(undefined);
   const onDetectedRef = useRef<(code: string) => void>(() => undefined);
 
   const stopCamera = useCallback(() => {
+    requestRef.current += 1;
+    startingRef.current = false;
     window.clearInterval(intervalRef.current);
+    intervalRef.current = undefined;
+    window.clearTimeout(navigationTimerRef.current);
+    navigationTimerRef.current = undefined;
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+    }
     streamRef.current?.getTracks().forEach(track => track.stop());
     streamRef.current = null;
-    setCameraActive(false);
+    if (mountedRef.current) {
+      setCameraActive(false);
+      setCameraStarting(false);
+    }
   }, []);
 
+  const closeScanner = useCallback(() => {
+    stopCamera();
+    mountedRef.current = false;
+    onClose();
+  }, [onClose, stopCamera]);
+
   const startCamera = useCallback(async () => {
+    if (!mountedRef.current || startingRef.current) return;
+    stopCamera();
+    const requestId = ++requestRef.current;
+    startingRef.current = true;
+    setCameraStarting(true);
     setCameraError(null);
     setScannedResult(null);
     try {
@@ -44,19 +72,32 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
         throw new Error('La cámara no es soportada en este entorno o navegador.');
       }
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      if (!mountedRef.current || requestId !== requestRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
+      const video = videoRef.current;
+      if (!video) throw new Error('Video element unavailable');
+      video.srcObject = stream;
+      await video.play();
+      if (!mountedRef.current || requestId !== requestRef.current) {
+        return;
       }
       setCameraActive(true);
+      setCameraStarting(false);
+      startingRef.current = false;
 
       const Detector = (window as unknown as { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector;
       if (Detector) {
         const barcodeDetector = new Detector({ formats: ['ean_13', 'ean_8', 'upc_a', 'code_128', 'code_39'] });
+        let isDetecting = false;
         intervalRef.current = window.setInterval(async () => {
-          if (videoRef.current?.readyState !== 4) return;
-          const barcodes = await barcodeDetector.detect(videoRef.current).catch(() => []);
+          if (!mountedRef.current || requestId !== requestRef.current || isDetecting || video.readyState !== 4) return;
+          isDetecting = true;
+          const barcodes = await barcodeDetector.detect(video).catch(() => []);
+          isDetecting = false;
+          if (!mountedRef.current || requestId !== requestRef.current) return;
           if (barcodes.length > 0) {
             window.clearInterval(intervalRef.current);
             onDetectedRef.current(barcodes[0].rawValue);
@@ -64,16 +105,21 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
         }, 500);
       }
     } catch {
+      if (!mountedRef.current || requestId !== requestRef.current) return;
+      stopCamera();
       setCameraError(
         'No se pudo acceder a la cámara. Puedes ingresar el código ISBN o probar con los códigos de ejemplo.',
       );
-      setCameraActive(false);
     }
-  }, []);
+  }, [stopCamera]);
 
   useEffect(() => {
+    mountedRef.current = true;
     startCamera();
-    return stopCamera;
+    return () => {
+      mountedRef.current = false;
+      stopCamera();
+    };
   }, [startCamera, stopCamera]);
 
   const findBookByCode = async (code: string) => {
@@ -91,20 +137,23 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
   };
 
   const handleCodeDetected = async (code: string) => {
+    if (!mountedRef.current) return;
     setScannedResult(code);
     stopCamera();
 
     const matchedBook = await findBookByCode(code);
+    if (!mountedRef.current) return;
     if (matchedBook) {
       rememberBooks([matchedBook]);
       showToast(`¡Libro detectado: "${matchedBook.title}"!`, 'success');
-      setTimeout(() => {
-        onClose();
+      navigationTimerRef.current = window.setTimeout(() => {
+        if (!mountedRef.current) return;
+        closeScanner();
         navigate(paths.book(matchedBook.id));
       }, 700);
     } else {
       showToast(`El código ${code} no coincide con ningún libro publicado.`, 'info');
-      onClose();
+      closeScanner();
       navigate(paths.home(code));
     }
   };
@@ -120,7 +169,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
   };
 
   return (
-    <Modal onClose={onClose} labelledBy="scanner-title" className="max-w-md bg-white rounded-2xl border-slate-200">
+    <Modal onClose={closeScanner} labelledBy="scanner-title" className="max-w-md bg-white rounded-2xl border-slate-200">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/80">
         <div className="flex items-center gap-2.5">
           <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
@@ -134,7 +183,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
           </div>
         </div>
         <button
-          onClick={onClose}
+          onClick={closeScanner}
           aria-label="Cerrar escáner"
           className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
         >
@@ -143,9 +192,16 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
       </div>
 
       <div className="relative bg-slate-900 aspect-4/3 flex items-center justify-center overflow-hidden">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          aria-label="Vista previa de la cámara"
+          className={cameraActive ? 'w-full h-full object-cover' : 'hidden'}
+        />
         {cameraActive ? (
           <>
-            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none p-8">
               <div className="w-64 h-36 border-2 border-amber-400 rounded-xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]">
                 <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-amber-400 rounded-tl-sm"></div>
@@ -174,9 +230,10 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
             )}
             <button
               onClick={startCamera}
+              disabled={cameraStarting}
               className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold transition-colors"
             >
-              Reintentar Cámara
+              {cameraStarting ? 'Iniciando cámara…' : 'Reintentar Cámara'}
             </button>
           </div>
         )}
