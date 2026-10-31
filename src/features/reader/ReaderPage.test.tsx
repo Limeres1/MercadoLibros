@@ -56,6 +56,33 @@ beforeEach(() => {
 });
 
 describe('full text and page navigation', () => {
+  it('changes the rendered font size with buttons and slider, and restores it after reopening', () => {
+    const view = renderReader();
+    fireEvent.click(screen.getByTitle('Personalizar Lector: Temas y Tamaño de Letra'));
+    const smaller = screen.getByRole('button', { name: 'Reducir tamaño de letra' });
+    const larger = screen.getByRole('button', { name: 'Aumentar tamaño de letra' });
+    const slider = screen.getByRole('slider', { name: 'Tamaño de letra' });
+    const textContainer = screen.getByText('Texto completo comprado.').parentElement;
+    expect(textContainer).toHaveStyle({ fontSize: '18px' });
+    fireEvent.click(larger);
+    expect(textContainer).toHaveStyle({ fontSize: '20px' });
+    fireEvent.click(smaller);
+    expect(textContainer).toHaveStyle({ fontSize: '18px' });
+    fireEvent.change(slider, { target: { value: '14' } });
+    expect(smaller).toBeDisabled();
+    expect(textContainer).toHaveStyle({ fontSize: '14px' });
+    fireEvent.change(slider, { target: { value: '26' } });
+    expect(larger).toBeDisabled();
+    expect(textContainer).toHaveStyle({ fontSize: '26px' });
+    expect(screen.getByRole('slider', { name: 'Página de lectura' })).toHaveValue('1');
+    expect(state.updateProgress).not.toHaveBeenCalled();
+    view.unmount();
+    renderReader();
+    expect(screen.getByText('Texto completo comprado.').parentElement).toHaveStyle({ fontSize: '26px' });
+    fireEvent.click(screen.getByTitle('Personalizar Lector: Temas y Tamaño de Letra'));
+    expect(screen.getByRole('slider', { name: 'Tamaño de letra' })).toHaveValue('26');
+  });
+
   it('waits for full text without showing the free sample or saving a page', () => {
     state.contentLoading = true;
     state.text = null;

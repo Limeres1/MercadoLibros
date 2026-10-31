@@ -17,6 +17,7 @@ import {
 
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/PageLoader';
+import { READER_FONT_SIZE } from '@/constants/reader';
 import { ROUTES } from '@/constants/routes';
 import { useBook, useBookContent } from '@/features/catalog/BooksProvider';
 import { useLibrary } from '@/features/reader/LibraryProvider';
@@ -301,28 +302,39 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
 
           <div className="mb-4">
             <div className="flex justify-between items-center mb-2">
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tamaño de letra</label>
+              <label
+                htmlFor="reader-font-size"
+                className="text-xs font-semibold text-slate-500 uppercase tracking-wider"
+              >
+                Tamaño de letra
+              </label>
               <span className="text-xs font-bold text-amber-600">{readerSettings.fontSize}px</span>
             </div>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => updateReaderSettings({ fontSize: Math.max(14, readerSettings.fontSize - 2) })}
-                className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
+                aria-label="Reducir tamaño de letra"
+                disabled={readerSettings.fontSize <= READER_FONT_SIZE.min}
+                onClick={() => updateReaderSettings({ fontSize: readerSettings.fontSize - READER_FONT_SIZE.step })}
+                className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 A-
               </button>
               <input
                 type="range"
-                min="14"
-                max="26"
-                step="2"
+                id="reader-font-size"
+                min={READER_FONT_SIZE.min}
+                max={READER_FONT_SIZE.max}
+                step={READER_FONT_SIZE.step}
+                aria-valuetext={`${readerSettings.fontSize} píxeles`}
                 value={readerSettings.fontSize}
                 onChange={event => updateReaderSettings({ fontSize: Number(event.target.value) })}
                 className="flex-1 accent-amber-600 cursor-pointer"
               />
               <button
-                onClick={() => updateReaderSettings({ fontSize: Math.min(26, readerSettings.fontSize + 2) })}
-                className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center font-bold text-base hover:bg-slate-100 dark:hover:bg-slate-800"
+                aria-label="Aumentar tamaño de letra"
+                disabled={readerSettings.fontSize >= READER_FONT_SIZE.max}
+                onClick={() => updateReaderSettings({ fontSize: readerSettings.fontSize + READER_FONT_SIZE.step })}
+                className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center font-bold text-base hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 A+
               </button>
