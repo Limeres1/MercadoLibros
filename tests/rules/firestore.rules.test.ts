@@ -4,9 +4,9 @@ import {
   initializeTestEnvironment,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { readFileSync } from 'node:fs';
-import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { COLLECTIONS, docIds, USER_SUBCOLLECTIONS } from '@/constants/firestore';
 
@@ -191,6 +191,28 @@ describe('book contents', () => {
 });
 
 describe('favorites and library', () => {
+  it('C3: concurrent bookmark changes preserve additions from another browser', async () => {
+    const first = { id: 'first', page: 1, title: 'Primero', createdAt: NOW };
+    const second = { id: 'second', page: 2, title: 'Segundo', createdAt: NOW };
+    const third = { id: 'third', page: 3, title: 'Tercero', note: 'Nota', createdAt: NOW };
+    const firstBrowser = libraryDoc(BUYER, BOOK);
+    const secondBrowser = libraryDoc(BUYER, BOOK);
+    await Promise.all([
+      assertSucceeds(updateDoc(firstBrowser, { bookmarks: arrayUnion(first) })),
+      assertSucceeds(updateDoc(secondBrowser, { bookmarks: arrayUnion(second) })),
+    ]);
+    expect((await getDoc(firstBrowser)).data()?.bookmarks).toEqual(expect.arrayContaining([first, second]));
+    await Promise.all([
+      assertSucceeds(updateDoc(firstBrowser, { bookmarks: arrayRemove(first) })),
+      assertSucceeds(updateDoc(secondBrowser, { bookmarks: arrayUnion(third) })),
+    ]);
+    const restored = (await getDoc(libraryDoc(BUYER, BOOK))).data();
+    expect(restored?.bookmarks).toHaveLength(2);
+    expect(restored?.bookmarks).toEqual(expect.arrayContaining([second, third]));
+    expect(restored?.lastReadPage).toBe(0);
+    await assertFails(updateDoc(libraryDoc(OTHER_BUYER, BOOK), { bookmarks: arrayUnion(first) }));
+  });
+
   it('CA-3: a user cannot read favorites or library of another user', async () => {
     const db = dbAs(OTHER_BUYER);
     await assertFails(getDoc(doc(db, COLLECTIONS.users, BUYER, USER_SUBCOLLECTIONS.favorites, BOOK)));

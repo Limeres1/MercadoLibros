@@ -1,5 +1,5 @@
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { INITIAL_BOOKS, INITIAL_LIBRARY } from '@/data/initialData';
@@ -14,6 +14,8 @@ const state = vi.hoisted(() => ({
   contentLoading: false,
   text: 'Texto completo comprado.' as string | null,
   updateProgress: vi.fn(),
+  addBookmark: vi.fn(),
+  deleteBookmark: vi.fn(),
   loadContent: vi.fn(),
 }));
 
@@ -30,8 +32,8 @@ vi.mock('@/features/reader/LibraryProvider', () => ({
     getItem: (bookId: string) => (state.item?.bookId === bookId ? state.item : undefined),
     isLoading: state.libraryLoading,
     updateReadingProgress: state.updateProgress,
-    addBookmark: vi.fn(),
-    deleteBookmark: vi.fn(),
+    addBookmark: state.addBookmark,
+    deleteBookmark: state.deleteBookmark,
   }),
 }));
 
@@ -53,7 +55,62 @@ beforeEach(() => {
   state.contentLoading = false;
   state.text = 'Texto completo comprado.';
   state.updateProgress.mockClear();
+  state.addBookmark.mockReset().mockResolvedValue(true);
+  state.deleteBookmark.mockReset().mockResolvedValue(true);
   state.loadContent.mockClear();
+});
+
+describe('bookmark interactions', () => {
+  it('keeps the draft after failure and clears it only after a successful retry', async () => {
+    state.addBookmark.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    renderReader();
+    fireEvent.click(screen.getByTitle('Marcadores y notas'));
+    const title = screen.getByRole('textbox', { name: 'Título del marcador (opcional)' });
+    const note = screen.getByRole('textbox', { name: 'Nota personal de lectura' });
+    fireEvent.change(title, { target: { value: 'Mi escena' } });
+    fireEvent.change(note, { target: { value: 'Recordar este pasaje' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar Marcador' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Guardar Marcador' })).toBeEnabled());
+    expect(title).toHaveValue('Mi escena');
+    expect(note).toHaveValue('Recordar este pasaje');
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar Marcador' }));
+    await waitFor(() => expect(screen.queryByRole('textbox')).not.toBeInTheDocument());
+    expect(state.addBookmark).toHaveBeenLastCalledWith('purchased-book', 1, 'Mi escena', 'Recordar este pasaje');
+    fireEvent.click(screen.getByTitle('Marcadores y notas'));
+    expect(screen.getByRole('textbox', { name: 'Título del marcador (opcional)' })).toHaveValue('');
+  });
+
+  it('prevents repeated submission while the save is pending', async () => {
+    let resolveSave!: (saved: boolean) => void;
+    state.addBookmark.mockReturnValue(
+      new Promise<boolean>(resolve => {
+        resolveSave = resolve;
+      }),
+    );
+    renderReader();
+    fireEvent.click(screen.getByTitle('Marcadores y notas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar Marcador' }));
+    const pending = screen.getByRole('button', { name: 'Guardando…' });
+    expect(pending).toBeDisabled();
+    fireEvent.click(pending);
+    expect(state.addBookmark).toHaveBeenCalledTimes(1);
+    await act(async () => resolveSave(true));
+  });
+
+  it('opens a bookmark page and requests deletion of only that bookmark', async () => {
+    state.text = 'Uno.\n\nDos.\n\nTres.';
+    state.item = {
+      ...state.item!,
+      bookmarks: [{ id: 'scene', page: 2, title: 'Escena', createdAt: '2026-10-31T00:00:00Z' }],
+    };
+    renderReader();
+    fireEvent.click(screen.getByTitle('Marcadores y notas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Ir a página 2: Escena' }));
+    expect(screen.getByRole('slider', { name: 'Página de lectura' })).toHaveValue('2');
+    fireEvent.click(screen.getByTitle('Marcadores y notas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar marcador: Escena' }));
+    await waitFor(() => expect(state.deleteBookmark).toHaveBeenCalledWith('purchased-book', 'scene'));
+  });
 });
 
 describe('full text and page navigation', () => {

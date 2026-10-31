@@ -86,6 +86,8 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
   const [showBookmarksList, setShowBookmarksList] = useState(false);
   const [newBookmarkTitle, setNewBookmarkTitle] = useState('');
   const [newBookmarkNote, setNewBookmarkNote] = useState('');
+  const [isSavingBookmark, setIsSavingBookmark] = useState(false);
+  const [deletingBookmarkId, setDeletingBookmarkId] = useState<string | null>(null);
 
   const pagesText = useMemo(() => {
     const raw = contentText;
@@ -151,13 +153,30 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
 
   const currentBookmarks: Bookmark[] = libraryItem.bookmarks;
 
-  const handleCreateBookmark = (event: React.FormEvent) => {
+  const handleCreateBookmark = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (isSavingBookmark) return;
     const title = newBookmarkTitle.trim() || `Página ${currentPage} - ${pagesText[currentPage - 1]?.slice(0, 30)}...`;
-    addBookmark(book.id, currentPage, title, newBookmarkNote.trim());
-    setNewBookmarkTitle('');
-    setNewBookmarkNote('');
-    setShowBookmarksList(false);
+    setIsSavingBookmark(true);
+    try {
+      if (await addBookmark(book.id, currentPage, title, newBookmarkNote.trim())) {
+        setNewBookmarkTitle('');
+        setNewBookmarkNote('');
+        setShowBookmarksList(false);
+      }
+    } finally {
+      setIsSavingBookmark(false);
+    }
+  };
+
+  const handleDeleteBookmark = async (bookmarkId: string) => {
+    if (deletingBookmarkId) return;
+    setDeletingBookmarkId(bookmarkId);
+    try {
+      await deleteBookmark(book.id, bookmarkId);
+    } finally {
+      setDeletingBookmarkId(null);
+    }
   };
 
   const themeClasses = {
@@ -436,12 +455,16 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
             <input
               type="text"
               placeholder="Título del marcador (opcional)"
+              aria-label="Título del marcador (opcional)"
+              disabled={isSavingBookmark}
               value={newBookmarkTitle}
               onChange={event => setNewBookmarkTitle(event.target.value)}
               className="w-full px-2.5 py-1.5 text-xs bg-white reader-dark:bg-slate-800 border border-slate-200 reader-dark:border-slate-700 rounded-lg mb-2 outline-none focus:border-amber-500"
             />
             <textarea
               placeholder="Nota personal de lectura..."
+              aria-label="Nota personal de lectura"
+              disabled={isSavingBookmark}
               rows={2}
               value={newBookmarkNote}
               onChange={event => setNewBookmarkNote(event.target.value)}
@@ -449,10 +472,11 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
             />
             <button
               type="submit"
+              disabled={isSavingBookmark}
               className="w-full py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Guardar Marcador</span>
+              <span>{isSavingBookmark ? 'Guardando…' : 'Guardar Marcador'}</span>
             </button>
           </form>
 
@@ -467,25 +491,33 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
                   key={bm.id}
                   className="p-2.5 rounded-xl border border-slate-200 reader-dark:border-slate-700 hover:bg-slate-50 reader-dark:hover:bg-slate-800/60 transition-colors flex items-start justify-between gap-2"
                 >
-                  <div
+                  <button
+                    type="button"
+                    aria-label={`Ir a página ${bm.page}: ${bm.title}`}
                     onClick={() => {
                       handlePageChange(bm.page);
                       setShowBookmarksList(false);
                     }}
-                    className="flex-1 cursor-pointer"
+                    className="flex-1 min-w-0 text-left cursor-pointer"
                   >
-                    <div className="flex items-center gap-1.5 mb-1">
+                    <span className="flex items-center gap-1.5 mb-1">
                       <span className="px-1.5 py-0.5 rounded bg-amber-100 reader-dark:bg-amber-900/60 text-amber-800 reader-dark:text-amber-200 font-bold text-[10px]">
                         Pág {bm.page}
                       </span>
-                      <p className="text-xs font-semibold text-slate-900 reader-dark:text-white truncate">{bm.title}</p>
-                    </div>
+                      <span className="text-xs font-semibold text-slate-900 reader-dark:text-white truncate">
+                        {bm.title}
+                      </span>
+                    </span>
                     {bm.note && (
-                      <p className="text-[11px] text-slate-500 reader-dark:text-slate-400 italic">"{bm.note}"</p>
+                      <span className="block text-[11px] text-slate-500 reader-dark:text-slate-400 italic">
+                        "{bm.note}"
+                      </span>
                     )}
-                  </div>
+                  </button>
                   <button
-                    onClick={() => deleteBookmark(book.id, bm.id)}
+                    onClick={() => handleDeleteBookmark(bm.id)}
+                    disabled={Boolean(deletingBookmarkId)}
+                    aria-label={`Eliminar marcador: ${bm.title}`}
                     className="p-1 text-slate-400 hover:text-rose-500 rounded"
                     title="Eliminar marcador"
                   >

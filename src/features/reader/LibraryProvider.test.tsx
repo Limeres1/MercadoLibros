@@ -26,6 +26,8 @@ vi.mock('@/services/firestore', () => ({
   },
 }));
 vi.mock('firebase/firestore', () => ({
+  arrayUnion: (bookmark: unknown) => ({ operation: 'union', bookmark }),
+  arrayRemove: (bookmark: unknown) => ({ operation: 'remove', bookmark }),
   doc: (collection: string, bookId: string) => `${collection}/${bookId}`,
   updateDoc: (...args: unknown[]) => fake.updateDoc(...args),
   onSnapshot: (path: string, listener: (snapshot: LibrarySnapshot) => void) => {
@@ -47,6 +49,71 @@ beforeEach(() => {
   fake.listeners.clear();
   fake.updateDoc.mockReset().mockResolvedValue(undefined);
   fake.showToast.mockClear();
+});
+
+describe('bookmarks in Firestore', () => {
+  it('adds a trimmed bookmark atomically without replacing the array or reading position', async () => {
+    const { result } = renderHook(() => useLibrary(), { wrapper });
+    emit('owner', [{ ...item, bookmarks: [] }]);
+    await act(async () => {
+      expect(await result.current.addBookmark('book', 2, '  Escena  ', '  Mi nota  ')).toBe(true);
+    });
+    expect(fake.updateDoc).toHaveBeenCalledWith('users/owner/library/book', {
+      bookmarks: {
+        operation: 'union',
+        bookmark: expect.objectContaining({ page: 2, title: 'Escena', note: 'Mi nota' }),
+      },
+    });
+  });
+
+  it('uses a default title and omits an empty note', async () => {
+    const { result } = renderHook(() => useLibrary(), { wrapper });
+    emit('owner', [{ ...item, bookmarks: [] }]);
+    await act(async () => result.current.addBookmark('book', 1, ' ', ' '));
+    const saved = fake.updateDoc.mock.calls[0][1].bookmarks.bookmark;
+    expect(saved.title).toBe('Marcador en página 1');
+    expect(saved).not.toHaveProperty('note');
+  });
+
+  it('removes just the selected bookmark atomically', async () => {
+    const bookmark = { id: 'saved', page: 2, title: 'Escena', createdAt: '2026-10-31T00:00:00Z' };
+    const { result } = renderHook(() => useLibrary(), { wrapper });
+    emit('owner', [{ ...item, bookmarks: [bookmark] }]);
+    await act(async () => {
+      expect(await result.current.deleteBookmark('book', 'saved')).toBe(true);
+      expect(await result.current.deleteBookmark('book', 'missing')).toBe(false);
+    });
+    expect(fake.updateDoc).toHaveBeenCalledTimes(1);
+    expect(fake.updateDoc).toHaveBeenCalledWith('users/owner/library/book', {
+      bookmarks: { operation: 'remove', bookmark },
+    });
+  });
+
+  it('reports a failed creation without a success notification', async () => {
+    fake.updateDoc.mockRejectedValue({ code: 'unavailable' });
+    const { result } = renderHook(() => useLibrary(), { wrapper });
+    emit('owner', [{ ...item, bookmarks: [] }]);
+    await act(async () => expect(await result.current.addBookmark('book', 2, 'Escena')).toBe(false));
+    expect(fake.showToast).toHaveBeenCalledWith(expect.any(String), 'error');
+    expect(fake.showToast).not.toHaveBeenCalledWith(expect.any(String), 'success');
+  });
+
+  it('rejects invalid pages, unowned books and a full bookmark list', async () => {
+    const { result } = renderHook(() => useLibrary(), { wrapper });
+    emit('owner', [{ ...item, bookmarks: [] }]);
+    await act(async () => {
+      for (const page of [0, -1, 1.5, NaN, 4]) {
+        expect(await result.current.addBookmark('book', page, 'Escena')).toBe(false);
+      }
+      expect(await result.current.addBookmark('missing', 1, 'Escena')).toBe(false);
+    });
+    const bookmark = { id: 'saved', page: 1, title: 'Escena', createdAt: '2026-10-31T00:00:00Z' };
+    emit('owner', [
+      { ...item, bookmarks: Array.from({ length: 100 }, (_slot, index) => ({ ...bookmark, id: String(index) })) },
+    ]);
+    await act(async () => expect(await result.current.addBookmark('book', 1, 'Más')).toBe(false));
+    expect(fake.updateDoc).not.toHaveBeenCalled();
+  });
 });
 
 describe('reading progress in Firestore', () => {
