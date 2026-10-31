@@ -484,7 +484,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
               {book.title} — Página {currentPage} de {totalPages}
             </div>
 
-            <div className="whitespace-pre-line leading-relaxed selection:bg-amber-300 selection:text-slate-950">
+            <div className="whitespace-pre-line selection:bg-amber-300 selection:text-slate-950">
               {pagesText[currentPage - 1] || 'Fin del contenido disponible.'}
             </div>
           </div>
