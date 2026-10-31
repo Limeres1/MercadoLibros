@@ -7,7 +7,7 @@ import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { paths } from '@/constants/routes';
 import { useBooks } from '@/features/catalog/BooksProvider';
-import { isbnToken } from '@/lib/searchTokens';
+import { isbnSearchVariants, normalizeIsbn } from '@/lib/isbn';
 import { BarcodeDecoder, createBarcodeDecoder } from '@/services/barcodeDecoder';
 import { firestoreRefs } from '@/services/firestore';
 
@@ -20,6 +20,9 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
   const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualIsbn, setManualIsbn] = useState('');
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  const lookupPendingRef = useRef(false);
   const [scannedResult, setScannedResult] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -67,6 +70,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
     setCameraStarting(true);
     setCameraError(null);
     setScannedResult(null);
+    setLookupError(null);
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('La cámara no es soportada en este entorno o navegador.');
@@ -123,38 +127,53 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
   }, [startCamera, stopCamera]);
 
   const findBookByCode = async (code: string) => {
-    const token = isbnToken(code);
-    if (!token) return undefined;
     const snapshot = await getDocs(
       query(
         firestoreRefs.books(),
         where('status', '==', 'published'),
-        where('searchTokens', 'array-contains', token),
+        where('searchTokens', 'array-contains-any', isbnSearchVariants(code)),
         limit(1),
       ),
-    ).catch(() => null);
-    return snapshot?.docs[0]?.data();
+    );
+    return snapshot.docs[0]?.data();
   };
 
-  const handleCodeDetected = async (code: string) => {
-    if (!mountedRef.current) return;
+  const handleCodeDetected = async (value: string) => {
+    if (!mountedRef.current || lookupPendingRef.current) return;
+    const code = normalizeIsbn(value);
+    if (!code) {
+      setLookupError('Ingresá un ISBN válido de 10 o 13 caracteres. Revisá los dígitos del número.');
+      return;
+    }
+    lookupPendingRef.current = true;
+    setSearching(true);
+    setLookupError(null);
     setScannedResult(code);
     stopCamera();
 
-    const matchedBook = await findBookByCode(code);
-    if (!mountedRef.current) return;
-    if (matchedBook) {
-      rememberBooks([matchedBook]);
-      showToast(`¡Libro detectado: "${matchedBook.title}"!`, 'success');
-      navigationTimerRef.current = window.setTimeout(() => {
-        if (!mountedRef.current) return;
-        closeScanner();
-        navigate(paths.book(matchedBook.id));
-      }, 700);
-    } else {
-      showToast(`El código ${code} no coincide con ningún libro publicado.`, 'info');
-      closeScanner();
-      navigate(paths.home(code));
+    try {
+      const matchedBook = await findBookByCode(code);
+      if (!mountedRef.current) return;
+      if (matchedBook) {
+        rememberBooks([matchedBook]);
+        showToast(`¡Libro detectado: "${matchedBook.title}"!`, 'success');
+        navigationTimerRef.current = window.setTimeout(() => {
+          if (!mountedRef.current) return;
+          closeScanner();
+          navigate(paths.book(matchedBook.id));
+        }, 700);
+      } else {
+        setScannedResult(null);
+        setLookupError(`No encontramos un libro publicado con el ISBN ${code}. Revisá el número o probá con otro.`);
+        lookupPendingRef.current = false;
+        setSearching(false);
+      }
+    } catch {
+      if (!mountedRef.current) return;
+      setScannedResult(null);
+      setLookupError('No pudimos consultar el catálogo. Revisá tu conexión e intentá de nuevo.');
+      lookupPendingRef.current = false;
+      setSearching(false);
     }
   };
 
@@ -164,7 +183,6 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
 
   const handleManualSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!manualIsbn.trim()) return;
     handleCodeDetected(manualIsbn.trim());
   };
 
@@ -230,7 +248,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
             )}
             <button
               onClick={startCamera}
-              disabled={cameraStarting}
+              disabled={cameraStarting || searching}
               className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold transition-colors"
             >
               {cameraStarting ? 'Iniciando cámara…' : 'Reintentar Cámara'}
@@ -253,17 +271,30 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
             type="text"
             placeholder="Ingresa el ISBN manualmente (ej: 978-0307474728)"
             value={manualIsbn}
-            onChange={event => setManualIsbn(event.target.value)}
+            aria-label="ISBN"
+            aria-invalid={lookupError ? true : undefined}
+            aria-describedby={lookupError ? 'isbn-error' : undefined}
+            disabled={searching}
+            onChange={event => {
+              setManualIsbn(event.target.value);
+              setLookupError(null);
+            }}
             className="flex-1 px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
           />
           <button
             type="submit"
+            disabled={searching}
             className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors"
           >
-            <span>Buscar</span>
+            <span>{searching ? 'Buscando…' : 'Buscar'}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </form>
+        {lookupError && (
+          <p id="isbn-error" role="alert" className="text-xs text-rose-700">
+            {lookupError}
+          </p>
+        )}
 
         <div>
           <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
@@ -273,6 +304,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
           <div className="grid grid-cols-2 gap-2 text-left">
             <button
               type="button"
+              disabled={searching}
               onClick={() => handleCodeDetected('978-0307474728')}
               className="p-2 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg text-xs transition-colors group"
             >
@@ -282,6 +314,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
 
             <button
               type="button"
+              disabled={searching}
               onClick={() => handleCodeDetected('978-0307950925')}
               className="p-2 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg text-xs transition-colors group"
             >
@@ -291,6 +324,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
 
             <button
               type="button"
+              disabled={searching}
               onClick={() => handleCodeDetected('978-8420471891')}
               className="p-2 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg text-xs transition-colors group"
             >
@@ -300,6 +334,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
 
             <button
               type="button"
+              disabled={searching}
               onClick={() => handleCodeDetected('978-0156013864')}
               className="p-2 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg text-xs transition-colors group"
             >

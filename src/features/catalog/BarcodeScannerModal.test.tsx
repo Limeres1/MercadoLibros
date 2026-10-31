@@ -201,3 +201,83 @@ describe('scanner camera lifecycle', () => {
     expect(fake.navigate).not.toHaveBeenCalled();
   });
 });
+
+describe('manual ISBN lookup', () => {
+  const submit = (value: string) => {
+    fireEvent.change(screen.getByRole('textbox', { name: 'ISBN' }), { target: { value } });
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
+  };
+
+  it.each(['', '123', '9780307474729', '0307474721', 'https://example.com/9780307474728'])(
+    'rejects %s before contacting the catalog and keeps the input editable',
+    async value => {
+      renderScanner();
+      await waitFor(() => expect(play).toHaveBeenCalled());
+      submit(value);
+      expect(screen.getByRole('alert')).toHaveTextContent('ISBN válido');
+      expect(screen.getByRole('textbox', { name: 'ISBN' })).toBeEnabled();
+      expect(fake.getDocs).not.toHaveBeenCalled();
+      expect(fake.navigate).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['978-0 307-47472-8', '0-307-47472-0'])(
+    'normalizes %s and searches both ISBN representations without requiring a camera',
+    async value => {
+      getUserMedia.mockRejectedValue(new Error('Permission denied'));
+      fake.getDocs.mockResolvedValue({ docs: [{ data: () => ({ id: 'book', title: 'Libro' }) }] });
+      renderScanner();
+      await screen.findByRole('button', { name: 'Reintentar Cámara' });
+      submit(value);
+      await waitFor(() => expect(fake.rememberBooks).toHaveBeenCalledTimes(1));
+      const criteria = fake.getDocs.mock.calls[0][0];
+      const isbnFilter = criteria.find((entry: unknown) => Array.isArray(entry) && entry[0] === 'searchTokens');
+      expect(isbnFilter.slice(0, 2)).toEqual(['searchTokens', 'array-contains-any']);
+      expect(isbnFilter[2]).toEqual(expect.arrayContaining(['9780307474728', '0307474720']));
+      expect(criteria).toContainEqual(['status', '==', 'published']);
+      fireEvent.click(screen.getByRole('button', { name: 'Cerrar escáner' }));
+    },
+  );
+
+  it('distinguishes an absent book from a failed request and allows correction', async () => {
+    renderScanner();
+    await waitFor(() => expect(play).toHaveBeenCalled());
+    submit('9780307474728');
+    expect(await screen.findByRole('alert')).toHaveTextContent('No encontramos un libro publicado');
+    expect(fake.navigate).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole('textbox', { name: 'ISBN' }), { target: { value: '0307474720' } });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps the ISBN after a catalog error and lets the user retry', async () => {
+    fake.getDocs.mockRejectedValueOnce(new Error('unavailable'));
+    renderScanner();
+    await waitFor(() => expect(play).toHaveBeenCalled());
+    submit('9780307474728');
+    expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos consultar el catálogo');
+    expect(screen.getByRole('textbox', { name: 'ISBN' })).toHaveValue('9780307474728');
+    expect(fake.navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('No encontramos un libro publicado');
+    expect(fake.getDocs).toHaveBeenCalledTimes(2);
+  });
+
+  it('blocks duplicate submissions and ignores a lookup that completes after close', async () => {
+    const lookup = deferred<{ docs: { data: () => { id: string; title: string } }[] }>();
+    fake.getDocs.mockReturnValue(lookup.promise);
+    renderScanner();
+    await waitFor(() => expect(play).toHaveBeenCalled());
+    submit('9780307474728');
+    const searching = screen.getByRole('button', { name: 'Buscando…' });
+    expect(searching).toBeDisabled();
+    fireEvent.click(searching);
+    fireEvent.click(screen.getByRole('button', { name: 'Cien años de soledad ISBN: 978-0307474728' }));
+    expect(fake.getDocs).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar escáner' }));
+    await act(async () => lookup.resolve({ docs: [{ data: () => ({ id: 'book', title: 'Libro' }) }] }));
+    expect(fake.rememberBooks).not.toHaveBeenCalled();
+    expect(fake.navigate).not.toHaveBeenCalled();
+    expect(fake.showToast).not.toHaveBeenCalled();
+  });
+});
