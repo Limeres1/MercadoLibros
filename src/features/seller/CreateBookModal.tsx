@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
@@ -117,6 +117,7 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
   const [aiProposal, setAiProposal] = useState<AIBookProposal | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const aiRequestRef = useRef(0);
 
   const [coverStatus, setCoverStatus] = useState<FileStatus>(IDLE);
   const [bookFileStatus, setBookFileStatus] = useState<FileStatus>(IDLE);
@@ -217,24 +218,31 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
   };
 
   const handleGenerate = async () => {
+    const request = ++aiRequestRef.current;
     setAiError(null);
     setIsGenerating(true);
     try {
-      setAiProposal(
-        await generateBookProposal({
-          title,
-          author,
-          genre,
-          language,
-          excerpt: sampleText.trim() || fullContent.trim(),
-        }),
-      );
+      const proposal = await generateBookProposal({
+        title,
+        author,
+        genre,
+        language,
+        excerpt: sampleText.trim() || fullContent.trim(),
+      });
+      if (request === aiRequestRef.current) setAiProposal(proposal);
     } catch (error) {
+      if (request !== aiRequestRef.current) return;
       setAiProposal(null);
       setAiError(error instanceof Error ? error.message : 'La IA no está disponible en este momento.');
     } finally {
-      setIsGenerating(false);
+      if (request === aiRequestRef.current) setIsGenerating(false);
     }
+  };
+
+  const discardProposal = () => {
+    aiRequestRef.current++;
+    setAiProposal(null);
+    setIsGenerating(false);
   };
 
   const applyProposal = () => {
@@ -694,7 +702,7 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
               replacesDescription={Boolean(description.trim())}
               onChange={setAiProposal}
               onApply={applyProposal}
-              onDiscard={() => setAiProposal(null)}
+              onDiscard={discardProposal}
             />
           )}
           <textarea
@@ -713,7 +721,13 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
             <p className="mb-2 text-[11px] text-slate-500">
               Ayudan a encontrar el libro en el buscador. Separalas con coma o Enter.
             </p>
-            <KeywordsField id={ids.keywords} keywords={keywords} onChange={setKeywords} inputClassName={INPUT_CLASS} />
+            <KeywordsField
+              id={ids.keywords}
+              listLabel="Palabras clave cargadas"
+              keywords={keywords}
+              onChange={setKeywords}
+              inputClassName={INPUT_CLASS}
+            />
           </div>
         </div>
 

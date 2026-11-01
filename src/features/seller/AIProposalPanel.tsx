@@ -89,6 +89,7 @@ export const AIProposalPanel: React.FC<AIProposalPanelProps> = ({
           </label>
           <KeywordsField
             id={`${fieldId}-keywords`}
+            listLabel="Palabras clave de la propuesta"
             keywords={proposal.keywords}
             onChange={keywords => onChange({ ...proposal, keywords })}
             inputClassName={PANEL_INPUT_CLASS}

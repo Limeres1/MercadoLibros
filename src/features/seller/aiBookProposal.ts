@@ -20,7 +20,7 @@ const MAX_DESCRIPTION_LENGTH = 1500;
 
 export const AI_PROPOSAL_ERRORS = {
   missingTitle: 'Escribí al menos el título para que la IA pueda proponer la sinopsis.',
-  invalidResponse: 'La IA respondió algo que no pudimos usar. Probá de nuevo o escribí la sinopsis a mano.',
+  invalidResponse: 'La IA respondió algo que no pudimos usar. Probá de nuevo.',
 };
 
 export const AI_SELLER_SYSTEM_INSTRUCTION = `Sos el asistente editorial de MercadoLibros, una librería online argentina.

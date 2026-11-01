@@ -6,12 +6,13 @@ import { mergeKeywords } from '@/features/seller/aiBookProposal';
 
 interface KeywordsFieldProps {
   id: string;
+  listLabel: string;
   keywords: string[];
   onChange: (keywords: string[]) => void;
   inputClassName: string;
 }
 
-export const KeywordsField: React.FC<KeywordsFieldProps> = ({ id, keywords, onChange, inputClassName }) => {
+export const KeywordsField: React.FC<KeywordsFieldProps> = ({ id, listLabel, keywords, onChange, inputClassName }) => {
   const [draft, setDraft] = useState('');
   const isFull = keywords.length >= BOOK_KEYWORD_LIMITS.maxCount;
 
@@ -24,7 +25,7 @@ export const KeywordsField: React.FC<KeywordsFieldProps> = ({ id, keywords, onCh
   return (
     <div className="space-y-2">
       {keywords.length > 0 && (
-        <ul aria-label="Palabras clave cargadas" className="flex flex-wrap gap-1.5">
+        <ul aria-label={listLabel} className="flex flex-wrap gap-1.5">
           {keywords.map(keyword => (
             <li
               key={keyword}

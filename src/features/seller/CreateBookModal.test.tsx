@@ -123,6 +123,22 @@ describe('CreateBookModal', () => {
       );
     });
 
+    it('CA-1: a proposal that arrives after discarding is ignored', async () => {
+      let resolveLate: (value: typeof proposal) => void = () => undefined;
+      fake.generateBookProposal
+        .mockResolvedValueOnce(proposal)
+        .mockReturnValueOnce(new Promise(resolve => (resolveLate = resolve)));
+      renderForm();
+      await generate();
+      fireEvent.click(screen.getByRole('button', { name: /generar otra/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Descartar' }));
+      await act(async () => resolveLate({ ...proposal, description: 'Tarde.' }));
+
+      expect(screen.queryByLabelText('Sinopsis propuesta')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /generar con ia/i })).toBeEnabled();
+      expect(screen.getByLabelText('Sinopsis')).toHaveValue('');
+    });
+
     it('sends the book text as context for the proposal', async () => {
       fake.generateBookProposal.mockResolvedValue(proposal);
       renderForm();
