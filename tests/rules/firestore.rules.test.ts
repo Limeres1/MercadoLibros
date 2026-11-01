@@ -4,9 +4,9 @@ import {
   initializeTestEnvironment,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { readFileSync } from 'node:fs';
-import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { COLLECTIONS, docIds, USER_SUBCOLLECTIONS } from '@/constants/firestore';
 
@@ -161,6 +161,27 @@ describe('books', () => {
     await assertFails(updateDoc(doc(dbAs(SELLER), COLLECTIONS.books, BOOK), { salesCount: 999 }));
   });
 
+  it('D1: accepts an uploaded cover embedded as a compressed image, but not other data', async () => {
+    const db = dbAs(SELLER);
+    const cover = `data:image/jpeg;base64,${'A'.repeat(60000)}`;
+    await assertSucceeds(setDoc(doc(db, COLLECTIONS.books, 'book_new'), book({ coverUrl: cover })));
+    await assertFails(
+      setDoc(doc(db, COLLECTIONS.books, 'book_html'), book({ coverUrl: `data:text/html;base64,${'A'.repeat(2000)}` })),
+    );
+    await assertFails(
+      setDoc(
+        doc(db, COLLECTIONS.books, 'book_big'),
+        book({ coverUrl: `data:image/jpeg;base64,${'A'.repeat(160000)}` }),
+      ),
+    );
+  });
+
+  it('D1: a published book cannot be edited without going back to review', async () => {
+    const ref = doc(dbAs(SELLER), COLLECTIONS.books, BOOK);
+    await assertFails(updateDoc(ref, { price: 99 }));
+    await assertSucceeds(updateDoc(ref, { price: 99, status: 'pending_review' }));
+  });
+
   it('blocked sellers cannot publish books', async () => {
     await testEnv.withSecurityRulesDisabled(context =>
       updateDoc(doc(context.firestore(), COLLECTIONS.users, SELLER), { isBlocked: true }),
@@ -170,14 +191,59 @@ describe('books', () => {
 });
 
 describe('book contents', () => {
+  it('C4 CA-3: guests and non-buyers can read the free sample but cannot fetch full content', async () => {
+    const contexts = [testEnv.unauthenticatedContext().firestore(), dbAs(OTHER_BUYER)];
+    for (const database of contexts) {
+      const preview = await assertSucceeds(getDoc(doc(database, COLLECTIONS.books, BOOK)));
+      expect(preview.data()?.sampleText).toBe('Muestra');
+      expect(preview.data()?.text).toBeUndefined();
+      await assertFails(getDoc(doc(database, COLLECTIONS.bookContents, BOOK)));
+    }
+  });
+
+  it('C3 CA-3: a purchased book stays readable after withdrawal, only for its owner', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs(SELLER), COLLECTIONS.books, BOOK), { status: 'withdrawn' }));
+    await assertSucceeds(getDoc(doc(dbAs(BUYER), COLLECTIONS.books, BOOK)));
+    await assertSucceeds(getDoc(doc(dbAs(BUYER), COLLECTIONS.bookContents, BOOK)));
+    await assertFails(getDoc(doc(dbAs(OTHER_BUYER), COLLECTIONS.books, BOOK)));
+    await assertFails(getDoc(doc(dbAs(OTHER_BUYER), COLLECTIONS.bookContents, BOOK)));
+    const visitor = testEnv.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(visitor, COLLECTIONS.books, BOOK)));
+    await assertFails(getDoc(doc(visitor, COLLECTIONS.bookContents, BOOK)));
+  });
+
   it('only the owner of the book in the library, the seller or the admin read the full text', async () => {
     await assertSucceeds(getDoc(doc(dbAs(BUYER), COLLECTIONS.bookContents, BOOK)));
     await assertSucceeds(getDoc(doc(dbAs(SELLER), COLLECTIONS.bookContents, BOOK)));
+    await assertSucceeds(getDoc(doc(dbAs(ADMIN), COLLECTIONS.bookContents, BOOK)));
     await assertFails(getDoc(doc(dbAs(OTHER_BUYER), COLLECTIONS.bookContents, BOOK)));
+    await assertFails(getDoc(doc(testEnv.unauthenticatedContext().firestore(), COLLECTIONS.bookContents, BOOK)));
   });
 });
 
 describe('favorites and library', () => {
+  it('C3: concurrent bookmark changes preserve additions from another browser', async () => {
+    const first = { id: 'first', page: 1, title: 'Primero', createdAt: NOW };
+    const second = { id: 'second', page: 2, title: 'Segundo', createdAt: NOW };
+    const third = { id: 'third', page: 3, title: 'Tercero', note: 'Nota', createdAt: NOW };
+    const firstBrowser = libraryDoc(BUYER, BOOK);
+    const secondBrowser = libraryDoc(BUYER, BOOK);
+    await Promise.all([
+      assertSucceeds(updateDoc(firstBrowser, { bookmarks: arrayUnion(first) })),
+      assertSucceeds(updateDoc(secondBrowser, { bookmarks: arrayUnion(second) })),
+    ]);
+    expect((await getDoc(firstBrowser)).data()?.bookmarks).toEqual(expect.arrayContaining([first, second]));
+    await Promise.all([
+      assertSucceeds(updateDoc(firstBrowser, { bookmarks: arrayRemove(first) })),
+      assertSucceeds(updateDoc(secondBrowser, { bookmarks: arrayUnion(third) })),
+    ]);
+    const restored = (await getDoc(libraryDoc(BUYER, BOOK))).data();
+    expect(restored?.bookmarks).toHaveLength(2);
+    expect(restored?.bookmarks).toEqual(expect.arrayContaining([second, third]));
+    expect(restored?.lastReadPage).toBe(0);
+    await assertFails(updateDoc(libraryDoc(OTHER_BUYER, BOOK), { bookmarks: arrayUnion(first) }));
+  });
+
   it('CA-3: a user cannot read favorites or library of another user', async () => {
     const db = dbAs(OTHER_BUYER);
     await assertFails(getDoc(doc(db, COLLECTIONS.users, BUYER, USER_SUBCOLLECTIONS.favorites, BOOK)));
@@ -188,6 +254,7 @@ describe('favorites and library', () => {
   it('the owner saves reading progress but cannot add books to the library', async () => {
     await assertSucceeds(updateDoc(libraryDoc(BUYER, BOOK), { lastReadPage: 12 }));
     await assertFails(updateDoc(libraryDoc(BUYER, BOOK), { orderId: 'otro' }));
+    await assertFails(updateDoc(libraryDoc(BUYER, BOOK), { totalPages: 201 }));
     await assertFails(
       setDoc(libraryDoc(BUYER, DRAFT_BOOK), { userId: BUYER, bookId: DRAFT_BOOK, lastReadPage: 0, totalPages: 1 }),
     );
@@ -310,6 +377,13 @@ describe('reports and audit log', () => {
 
   it('users report, only admins resolve', async () => {
     await assertSucceeds(setDoc(doc(dbAs(BUYER), COLLECTIONS.reports, reportId), report));
+    await assertFails(setDoc(doc(dbAs(BUYER), COLLECTIONS.reports, reportId), report));
+    await assertSucceeds(
+      setDoc(doc(dbAs(OTHER_BUYER), COLLECTIONS.reports, docIds.report(OTHER_BUYER, 'book', BOOK)), {
+        ...report,
+        reporterId: OTHER_BUYER,
+      }),
+    );
     await assertFails(updateDoc(doc(dbAs(BUYER), COLLECTIONS.reports, reportId), { status: 'resolved' }));
     await assertSucceeds(
       updateDoc(doc(dbAs(ADMIN), COLLECTIONS.reports, reportId), {
@@ -318,6 +392,10 @@ describe('reports and audit log', () => {
         resolvedAt: NOW,
       }),
     );
+  });
+
+  it('visitors cannot create reports', async () => {
+    await assertFails(setDoc(doc(testEnv.unauthenticatedContext().firestore(), COLLECTIONS.reports, reportId), report));
   });
 
   it('blocked users cannot report', async () => {

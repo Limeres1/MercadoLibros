@@ -27,7 +27,7 @@ import { useBook } from '@/features/catalog/BooksProvider';
 import { isOutOfStock } from '@/features/catalog/catalogFilters';
 import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
 import { ReportModal } from '@/features/catalog/reports/ReportModal';
-import { ReportTarget } from '@/features/catalog/reports/ReportsProvider';
+import { ReportTarget, useReports } from '@/features/catalog/reports/ReportsProvider';
 import { BookReviews } from '@/features/catalog/reviews/BookReviews';
 import { SampleReaderModal } from '@/features/catalog/SampleReaderModal';
 import { useLibrary } from '@/features/reader/LibraryProvider';
@@ -80,6 +80,7 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
   const [isSampleOpen, setIsSampleOpen] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
 
+  const hasSample = Boolean(book.sampleText?.trim());
   const isFav = isFavorite(book.id);
   const soldOut = isOutOfStock(book);
   const { hasPurchased } = useLibrary();
@@ -88,6 +89,8 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
   const cartQuantity = getCartQuantity(book.id);
   const maxQuantity = getMaxQuantity(book);
   const statusNotice = STATUS_NOTICES[book.status];
+
+  const { hasReported } = useReports();
 
   const openReport = (target: ReportTarget) => {
     if (requireLogin('Iniciá sesión para denunciar contenido.')) setReportTarget(target);
@@ -115,7 +118,14 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
     { label: 'Páginas', value: String(book.pages) },
     { label: 'Año de publicación', value: String(book.publicationYear) },
     { label: 'ISBN', value: book.isbn || 'Sin ISBN' },
-    { label: 'Vendedor', value: book.sellerName },
+    {
+      label: 'Vendedor',
+      value: (
+        <Link to={paths.userProfile(book.sellerId)} className="text-amber-700 hover:underline">
+          {book.sellerName}
+        </Link>
+      ),
+    },
   ];
 
   return (
@@ -160,11 +170,12 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
           </div>
           <button
             type="button"
+            disabled={!hasSample}
             onClick={() => setIsSampleOpen(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-800 hover:border-amber-500 hover:text-amber-800"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-800 enabled:hover:border-amber-500 enabled:hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <BookOpen className="h-4 w-4" aria-hidden="true" />
-            Leer muestra gratis
+            {hasSample ? 'Leer muestra gratis' : 'Muestra no disponible'}
           </button>
         </div>
 
@@ -314,14 +325,21 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
             </dl>
           </section>
 
-          <button
-            type="button"
-            onClick={() => openReport({ type: 'book', id: book.id, title: book.title })}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-700"
-          >
-            <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
-            Denunciar esta publicación
-          </button>
+          {hasReported({ type: 'book', id: book.id }) ? (
+            <p className="flex items-center gap-1.5 text-xs text-slate-500">
+              <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+              Ya denunciaste esta publicación. La revisa la administración.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => openReport({ type: 'book', id: book.id, title: book.title })}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-700"
+            >
+              <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+              Denunciar esta publicación
+            </button>
+          )}
         </div>
       </article>
 

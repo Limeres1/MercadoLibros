@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
@@ -15,10 +15,20 @@ import {
 
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
+import { BOOK_GENRES, BOOK_LANGUAGES } from '@/constants/catalog';
 import { useBooks } from '@/features/catalog/BooksProvider';
+import {
+  BOOK_FILE_LIMITS,
+  BookFileKind,
+  checkContentSize,
+  describeText,
+  MAX_SAMPLE_LENGTH,
+  prepareCover,
+  readBookText,
+  takeSample,
+  validateBookFile,
+} from '@/features/seller/bookFiles';
 import { useSellerBooks } from '@/features/seller/useSellerBooks';
-import { createId } from '@/lib/ids';
-import { ASSET_CONSTRAINTS, uploadBookAsset, validateAssetFile } from '@/services/storage';
 import { Book, BookCondition } from '@/types';
 
 interface CreateBookModalProps {
@@ -31,13 +41,57 @@ const SAMPLE_COVERS = [
   'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80',
   'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=600&q=80',
   'https://images.unsplash.com/photo-1495640388908-05fa85288e61?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80',
 ];
+
+const INPUT_CLASS =
+  'w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500';
+const FILE_INPUT_CLASS =
+  'block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer';
+const LABEL_CLASS = 'text-xs font-semibold text-slate-700 block mb-1';
+
+const acceptFor = (kind: BookFileKind) => BOOK_FILE_LIMITS[kind].extensions.map(extension => `.${extension}`).join(',');
+
+interface FileStatus {
+  busy: boolean;
+  error: string | null;
+  info: string | null;
+}
+
+const IDLE: FileStatus = { busy: false, error: null, info: null };
+
+const FileFeedback: React.FC<{ status: FileStatus; id: string }> = ({ status, id }) => (
+  <div id={id} aria-live="polite" className="text-[11px]">
+    {status.busy && (
+      <p className="flex items-center gap-1 text-slate-500">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        Leyendo el archivo…
+      </p>
+    )}
+    {status.error && (
+      <p role="alert" className="flex items-start gap-1 font-medium text-rose-700">
+        <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        {status.error}
+      </p>
+    )}
+    {status.info && !status.error && !status.busy && (
+      <p className="flex items-center gap-1 font-medium text-emerald-700">
+        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        {status.info}
+      </p>
+    )}
+  </div>
+);
+
+const summarize = (text: string) => {
+  const { words, readerPages } = describeText(text);
+  return `${words.toLocaleString('es-AR')} palabras · ${readerPages} páginas en el lector`;
+};
 
 export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, onClose }) => {
   const { saveBook } = useSellerBooks();
   const { loadBookContent } = useBooks();
   const { showToast } = useToast();
+  const fieldId = useId();
 
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
@@ -45,198 +99,199 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('15.00');
   const [condition, setCondition] = useState<BookCondition>('nuevo');
-  const [genre, setGenre] = useState('Ficción');
-  const [language, setLanguage] = useState('Español');
-  const [coverUrl, setCoverUrl] = useState('');
+  const [genre, setGenre] = useState<string>('Ficción');
+  const [language, setLanguage] = useState<string>('Español');
+  const [coverUrl, setCoverUrl] = useState(SAMPLE_COVERS[0]);
   const [pages, setPages] = useState('250');
-  const [publicationYear, setPublicationYear] = useState('2024');
+  const [publicationYear, setPublicationYear] = useState(String(new Date().getFullYear()));
   const [stock, setStock] = useState('10');
   const [sampleText, setSampleText] = useState('');
   const [fullContent, setFullContent] = useState('');
+  const [isContentLoading, setIsContentLoading] = useState(false);
+  const [isTextEditorOpen, setIsTextEditorOpen] = useState(false);
 
-  // Storage files & URLs
-  const [coverFile, setCoverFile] = useState<File | null>(null);
-  const [coverPreview, setCoverPreview] = useState<string | null>(null);
-  const [bookFile, setBookFile] = useState<File | null>(null);
-  const [bookFileUrl, setBookFileUrl] = useState<string>('');
-  const [sampleFile, setSampleFile] = useState<File | null>(null);
-  const [sampleFileUrl, setSampleFileUrl] = useState<string>('');
-
+  const [coverStatus, setCoverStatus] = useState<FileStatus>(IDLE);
+  const [bookFileStatus, setBookFileStatus] = useState<FileStatus>(IDLE);
+  const [sampleFileStatus, setSampleFileStatus] = useState<FileStatus>(IDLE);
+  const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
 
   useEffect(() => {
-    if (bookToEdit) {
-      setTitle(bookToEdit.title);
-      setAuthor(bookToEdit.author);
-      setIsbn(bookToEdit.isbn);
-      setDescription(bookToEdit.description);
-      setPrice(String(bookToEdit.price));
-      setCondition(bookToEdit.condition);
-      setGenre(bookToEdit.genre);
-      setLanguage(bookToEdit.language);
-      setCoverUrl(bookToEdit.coverUrl);
-      setCoverPreview(bookToEdit.coverUrl);
-      setBookFileUrl(bookToEdit.fileUrl || '');
-      setSampleFileUrl(bookToEdit.sampleUrl || '');
-      setPages(String(bookToEdit.pages));
-      setPublicationYear(String(bookToEdit.publicationYear));
-      setStock(String(bookToEdit.stock || 10));
-      setSampleText(bookToEdit.sampleText || '');
-      setFullContent('');
-      loadBookContent(bookToEdit.id).then(text => setFullContent(text ?? ''));
-    } else {
-      setTitle('');
-      setAuthor('');
-      setIsbn('');
-      setDescription('');
-      setPrice('15.00');
-      setCondition('nuevo');
-      setGenre('Ficción');
-      setLanguage('Español');
-      setCoverUrl(SAMPLE_COVERS[0]);
-      setCoverPreview(SAMPLE_COVERS[0]);
-      setBookFileUrl('');
-      setSampleFileUrl('');
-      setPages('250');
-      setPublicationYear('2024');
-      setStock('10');
-      setSampleText('Fragmento del primer capítulo listo para lectura de muestra...');
-      setFullContent('Capítulo 1\nEl texto completo de la obra disponible tras la compra.');
-    }
+    if (!bookToEdit) return;
+    setTitle(bookToEdit.title);
+    setAuthor(bookToEdit.author);
+    setIsbn(bookToEdit.isbn);
+    setDescription(bookToEdit.description);
+    setPrice(String(bookToEdit.price));
+    setCondition(bookToEdit.condition);
+    setGenre(bookToEdit.genre);
+    setLanguage(bookToEdit.language);
+    setCoverUrl(bookToEdit.coverUrl);
+    setPages(String(bookToEdit.pages));
+    setPublicationYear(String(bookToEdit.publicationYear));
+    setStock(String(bookToEdit.stock ?? 0));
+    setSampleText(bookToEdit.sampleText || '');
+    if (bookToEdit.condition !== 'digital') return;
+    setIsContentLoading(true);
+    loadBookContent(bookToEdit.id)
+      .then(text => {
+        setFullContent(text ?? '');
+        if (text) setBookFileStatus({ ...IDLE, info: `Texto guardado: ${summarize(text)}` });
+      })
+      .finally(() => setIsContentLoading(false));
   }, [bookToEdit, loadBookContent]);
 
-  // Handle Cover File Selection with CA-1 Validation
-  const handleCoverFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const statusSetters = { cover: setCoverStatus, bookFile: setBookFileStatus, sampleFile: setSampleFileStatus };
+
+  const pickFile = (event: React.ChangeEvent<HTMLInputElement>, kind: BookFileKind) => {
     const file = event.target.files?.[0];
-    if (!file) return;
-
-    const validation = validateAssetFile(file, 'cover');
-    if (!validation.valid) {
-      showToast(validation.error || ASSET_CONSTRAINTS.cover.formatError, 'error');
-      event.target.value = '';
-      return;
-    }
-
-    setCoverFile(file);
-    setCoverPreview(URL.createObjectURL(file));
+    if (!file) return null;
+    const error = validateBookFile(file, kind);
+    if (!error) return file;
+    event.target.value = '';
+    statusSetters[kind]({ ...IDLE, error });
+    return null;
   };
 
-  // Handle Book File Selection with CA-1 Validation
-  const handleBookFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleCoverChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = pickFile(event, 'cover');
     if (!file) return;
-
-    const validation = validateAssetFile(file, 'bookFile');
-    if (!validation.valid) {
-      showToast(validation.error || ASSET_CONSTRAINTS.bookFile.formatError, 'error');
+    setCoverStatus({ ...IDLE, busy: true });
+    try {
+      setCoverUrl(await prepareCover(file));
+      setCoverStatus({ ...IDLE, info: `Portada lista: ${file.name}` });
+    } catch (error) {
       event.target.value = '';
-      return;
+      setCoverStatus({ ...IDLE, error: (error as Error).message });
     }
-
-    setBookFile(file);
   };
 
-  // Handle Sample File Selection with CA-1 Validation
-  const handleSampleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleBookFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = pickFile(event, 'bookFile');
     if (!file) return;
-
-    const validation = validateAssetFile(file, 'sampleFile');
-    if (!validation.valid) {
-      showToast(validation.error || ASSET_CONSTRAINTS.sampleFile.formatError, 'error');
+    setBookFileStatus({ ...IDLE, busy: true });
+    try {
+      const text = await readBookText(file);
+      const sizeError = checkContentSize(text);
+      if (sizeError) throw new Error(sizeError);
+      setFullContent(text);
+      setBookFileStatus({ ...IDLE, info: `${file.name}: ${summarize(text)}` });
+      if (!sampleText.trim()) {
+        setSampleText(takeSample(text, 3000));
+        setSampleFileStatus({ ...IDLE, info: 'Usamos el comienzo del libro como muestra. Podés cambiarla.' });
+      }
+    } catch (error) {
       event.target.value = '';
-      return;
+      setBookFileStatus({ ...IDLE, error: (error as Error).message });
     }
-
-    setSampleFile(file);
   };
+
+  const handleSampleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = pickFile(event, 'sampleFile');
+    if (!file) return;
+    setSampleFileStatus({ ...IDLE, busy: true });
+    try {
+      const text = await readBookText(file);
+      const sample = takeSample(text);
+      setSampleText(sample);
+      setSampleFileStatus({
+        ...IDLE,
+        info:
+          sample.length < text.length
+            ? `Muestra cargada de ${file.name}, recortada a ${MAX_SAMPLE_LENGTH.toLocaleString('es-AR')} caracteres.`
+            : `Muestra cargada de ${file.name}.`,
+      });
+    } catch (error) {
+      event.target.value = '';
+      setSampleFileStatus({ ...IDLE, error: (error as Error).message });
+    }
+  };
+
+  const validate = (submitForReview: boolean) => {
+    if (!title.trim() || !author.trim()) return 'Completá el título y el autor del libro.';
+    const numericPrice = Number(price);
+    if (!Number.isFinite(numericPrice) || numericPrice <= 0) return 'Ingresá un precio mayor a 0.';
+    if (condition !== 'digital' && (!Number.isInteger(Number(stock)) || Number(stock) < 0))
+      return 'El stock tiene que ser un número entero, 0 o más.';
+    if (condition === 'digital') {
+      if (submitForReview && !fullContent.trim())
+        return 'Subí el archivo del libro (EPUB o TXT) antes de enviarlo a revisión: es lo que leen los compradores.';
+      return checkContentSize(fullContent);
+    }
+    return null;
+  };
+
+  const isBusy = isSubmitting || coverStatus.busy || bookFileStatus.busy || sampleFileStatus.busy || isContentLoading;
 
   const handleSubmit = async (submitForReview: boolean) => {
-    if (!title.trim() || !author.trim() || !price) {
-      showToast('Por favor completa el título, autor y precio del libro.', 'error');
-      return;
-    }
-
-    const numericPrice = parseFloat(price);
-    if (isNaN(numericPrice) || numericPrice <= 0) {
-      showToast('Por favor ingresa un precio válido mayor a 0.', 'error');
-      return;
-    }
-
+    const error = validate(submitForReview);
+    setFormError(error);
+    if (error) return;
     setIsSubmitting(true);
-    const targetBookId = bookToEdit?.id || createId();
-
-    let finalCoverUrl = coverUrl || SAMPLE_COVERS[0];
-    let finalBookFileUrl = bookFileUrl;
-    let finalSampleFileUrl = sampleFileUrl;
-
     try {
-      // 1. Upload Cover if a new file was chosen
-      if (coverFile) {
-        setUploadStatus('Subiendo portada a Storage...');
-        finalCoverUrl = await uploadBookAsset(targetBookId, coverFile, 'cover');
-      }
-
-      // 2. Upload Book File if chosen
-      if (bookFile) {
-        setUploadStatus('Subiendo archivo del libro a Storage...');
-        finalBookFileUrl = await uploadBookAsset(targetBookId, bookFile, 'bookFile');
-      }
-
-      // 3. Upload Sample File if chosen
-      if (sampleFile) {
-        setUploadStatus('Subiendo muestra gratuita a Storage...');
-        finalSampleFileUrl = await uploadBookAsset(targetBookId, sampleFile, 'sampleFile');
-      }
-
-      setUploadStatus(submitForReview ? 'Enviando a revisión...' : 'Guardando borrador...');
-
-      await saveBook(
+      const saved = await saveBook(
         {
-          id: targetBookId,
+          id: bookToEdit?.id,
           title: title.trim(),
           author: author.trim(),
           isbn: isbn.trim(),
           description: description.trim(),
-          price: numericPrice,
+          price: Number(price),
           condition,
           genre,
           language,
-          coverUrl: finalCoverUrl,
-          fileUrl: finalBookFileUrl || undefined,
-          sampleUrl: finalSampleFileUrl || undefined,
-          pages: parseInt(pages, 10) || 200,
-          publicationYear: parseInt(publicationYear, 10) || new Date().getFullYear(),
-          stock: condition === 'digital' ? undefined : parseInt(stock, 10) || 10,
-          sampleText: sampleText.trim() || (sampleFile ? `Muestra: ${sampleFile.name}` : 'Fragmento no disponible.'),
+          coverUrl,
+          pages: Math.round(Number(pages)) || 200,
+          publicationYear: Math.round(Number(publicationYear)) || new Date().getFullYear(),
+          ...(condition === 'digital' ? {} : { stock: Number(stock) }),
+          sampleText: sampleText.trim(),
         },
         submitForReview,
-        fullContent.trim(),
+        condition === 'digital' ? fullContent.trim() : undefined,
       );
-
-      onClose();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error al guardar el libro.';
-      showToast(message, 'error');
+      if (saved) onClose();
+    } catch (caught) {
+      showToast(caught instanceof Error ? caught.message : 'No pudimos guardar el libro.', 'error');
     } finally {
       setIsSubmitting(false);
-      setUploadStatus(null);
     }
   };
+
+  const ids = Object.fromEntries(
+    [
+      'title',
+      'author',
+      'isbn',
+      'price',
+      'condition',
+      'genre',
+      'language',
+      'amount',
+      'year',
+      'cover',
+      'coverHelp',
+      'bookFile',
+      'bookFileHelp',
+      'sampleFile',
+      'sampleFileHelp',
+      'description',
+      'sample',
+      'content',
+    ].map(name => [name, `${fieldId}-${name}`]),
+  );
 
   return (
     <Modal onClose={onClose} labelledBy="book-form-title" className="max-w-3xl bg-white rounded-3xl border-slate-200">
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/80">
         <div className="flex items-center gap-2.5">
           <div className="p-2 bg-emerald-100 text-emerald-800 rounded-xl">
-            <BookPlus className="w-5 h-5" />
+            <BookPlus className="w-5 h-5" aria-hidden="true" />
           </div>
           <div>
             <h3 id="book-form-title" className="font-bold text-slate-900 text-base">
-              {bookToEdit ? 'Editar Libro' : 'Publicar Nuevo Libro'}
+              {bookToEdit ? 'Editar libro' : 'Publicar nuevo libro'}
             </h3>
-            <p className="text-xs text-slate-500">Carga de ficha, portada, archivo, muestra y contenido digital</p>
+            <p className="text-xs text-slate-500">Ficha, portada, archivo del libro y muestra gratuita</p>
           </div>
         </div>
         <button
@@ -249,339 +304,336 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* Banner informativo de CA-2: Libro ya publicado vuelve a moderación */}
         {bookToEdit?.status === 'published' && (
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-            <div className="text-xs text-amber-900 space-y-0.5">
-              <p className="font-bold">Aviso de moderación (CA-2)</p>
-              <p className="text-amber-800">
-                Este libro está publicado actualmente. Al guardar cualquier modificación, pasará automáticamente a
-                estado <strong>En Revisión</strong> para que un administrador verifique los cambios antes de volver a la
-                tienda.
-              </p>
-            </div>
+            <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-xs text-amber-900">
+              Este libro está publicado. Si guardás cambios, vuelve a <strong>En revisión</strong> y un administrador
+              tiene que aprobarlo otra vez antes de que reaparezca en el catálogo.
+            </p>
           </div>
         )}
 
-        {/* Banner informativo si fue rechazado previamente */}
         {bookToEdit?.status === 'rejected' && bookToEdit.rejectionReason && (
           <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-rose-700 shrink-0 mt-0.5" />
+            <AlertTriangle className="w-5 h-5 text-rose-700 shrink-0 mt-0.5" aria-hidden="true" />
             <div className="text-xs text-rose-900 space-y-0.5">
-              <p className="font-bold">Motivo del rechazo anterior:</p>
+              <p className="font-bold">Motivo del rechazo</p>
               <p className="text-rose-800">{bookToEdit.rejectionReason}</p>
-              <p className="text-[11px] text-rose-600 mt-1">
-                Corrige las observaciones indicadas antes de volver a enviar a revisión.
-              </p>
+              <p className="text-[11px] text-rose-600 mt-1">Corregí lo indicado antes de volver a enviarlo.</p>
             </div>
           </div>
         )}
 
-        {/* Ficha técnica principal */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Título de la Obra *</label>
+            <label htmlFor={ids.title} className={LABEL_CLASS}>
+              Título *
+            </label>
             <input
-              type="text"
+              id={ids.title}
               required
+              maxLength={200}
               value={title}
               onChange={event => setTitle(event.target.value)}
-              placeholder="Ej: Rayuela"
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 font-medium"
+              placeholder="Ej.: Rayuela"
+              className={`${INPUT_CLASS} font-medium`}
             />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Autor / Escritor *</label>
+            <label htmlFor={ids.author} className={LABEL_CLASS}>
+              Autor *
+            </label>
             <input
-              type="text"
+              id={ids.author}
               required
+              maxLength={120}
               value={author}
               onChange={event => setAuthor(event.target.value)}
-              placeholder="Ej: Julio Cortázar"
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 font-medium"
+              placeholder="Ej.: Julio Cortázar"
+              className={`${INPUT_CLASS} font-medium`}
             />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Código ISBN</label>
+            <label htmlFor={ids.isbn} className={LABEL_CLASS}>
+              ISBN
+            </label>
             <input
-              type="text"
+              id={ids.isbn}
+              maxLength={20}
               value={isbn}
               onChange={event => setIsbn(event.target.value)}
-              placeholder="978-..."
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 font-mono"
+              placeholder="978-…"
+              className={`${INPUT_CLASS} font-mono`}
             />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Precio de Venta (USD) *</label>
+            <label htmlFor={ids.price} className={LABEL_CLASS}>
+              Precio (USD) *
+            </label>
             <input
+              id={ids.price}
               type="number"
-              step="0.10"
-              min="0.10"
+              step="0.01"
+              min="0.01"
               required
               value={price}
               onChange={event => setPrice(event.target.value)}
-              placeholder="15.00"
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 font-bold"
+              className={`${INPUT_CLASS} font-bold`}
             />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Formato / Condición</label>
+            <label htmlFor={ids.condition} className={LABEL_CLASS}>
+              Formato
+            </label>
             <select
+              id={ids.condition}
               value={condition}
               onChange={event => setCondition(event.target.value as BookCondition)}
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500"
+              className={INPUT_CLASS}
             >
-              <option value="nuevo">Nuevo (Físico)</option>
-              <option value="usado">Usado (Físico)</option>
-              <option value="digital">Digital (eBook)</option>
+              <option value="nuevo">Nuevo (físico, con envío)</option>
+              <option value="usado">Usado (físico, con envío)</option>
+              <option value="digital">Digital (se lee en la web)</option>
             </select>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Género</label>
+            <label htmlFor={ids.genre} className={LABEL_CLASS}>
+              Género
+            </label>
             <select
+              id={ids.genre}
               value={genre}
               onChange={event => setGenre(event.target.value)}
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500"
+              className={INPUT_CLASS}
             >
-              <option value="Ficción">Ficción</option>
-              <option value="Novela">Novela</option>
-              <option value="Realismo Mágico">Realismo Mágico</option>
-              <option value="Distopía">Distopía</option>
-              <option value="Clásico">Clásico</option>
-              <option value="Romance">Romance</option>
-              <option value="Poesía">Poesía</option>
-              <option value="Ensayo">Ensayo</option>
-              <option value="Historia">Historia</option>
-              <option value="Tecnología">Tecnología</option>
+              {[...new Set<string>([...BOOK_GENRES, genre])].map(option => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Idioma</label>
+            <label htmlFor={ids.language} className={LABEL_CLASS}>
+              Idioma
+            </label>
             <select
+              id={ids.language}
               value={language}
               onChange={event => setLanguage(event.target.value)}
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500"
+              className={INPUT_CLASS}
             >
-              <option value="Español">Español</option>
-              <option value="Inglés">Inglés</option>
-              <option value="Portugués">Portugués</option>
-              <option value="Francés">Francés</option>
+              {[...new Set<string>([...BOOK_LANGUAGES, language])].map(option => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">
-              {condition === 'digital' ? 'Número de Páginas' : 'Cantidad en Stock'}
-            </label>
-            {condition === 'digital' ? (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor={ids.amount} className={LABEL_CLASS}>
+                {condition === 'digital' ? 'Páginas' : 'Stock'}
+              </label>
               <input
+                id={ids.amount}
                 type="number"
-                min="1"
-                value={pages}
-                onChange={event => setPages(event.target.value)}
-                className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500"
+                min={condition === 'digital' ? 1 : 0}
+                step="1"
+                value={condition === 'digital' ? pages : stock}
+                onChange={event => (condition === 'digital' ? setPages : setStock)(event.target.value)}
+                className={INPUT_CLASS}
               />
-            ) : (
+            </div>
+            <div>
+              <label htmlFor={ids.year} className={LABEL_CLASS}>
+                Año
+              </label>
               <input
+                id={ids.year}
                 type="number"
-                min="1"
-                value={stock}
-                onChange={event => setStock(event.target.value)}
-                className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500"
+                min="0"
+                max="2100"
+                value={publicationYear}
+                onChange={event => setPublicationYear(event.target.value)}
+                className={INPUT_CLASS}
               />
-            )}
+            </div>
           </div>
         </div>
 
-        {/* Sección de Archivos y Subida a Firebase Storage (RF-27, RNF-8, CA-1) */}
         <div className="space-y-4 pt-2 border-t border-slate-100">
-          <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-            <Upload className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Archivos y Portada (Firebase Storage)</span>
+          <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+            <Upload className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+            Archivos
           </h4>
 
-          {/* 1. Subir Portada */}
           <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-                <ImageIcon className="w-4 h-4 text-emerald-600" />
-                <span>Portada del Libro *</span>
+              <label htmlFor={ids.cover} className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                <ImageIcon className="w-4 h-4 text-emerald-600" aria-hidden="true" />
+                Portada
               </label>
               <span className="text-[11px] text-slate-500">
-                Formatos: JPG, PNG, WebP (máx. {ASSET_CONSTRAINTS.cover.maxSizeLabel})
+                {BOOK_FILE_LIMITS.cover.label}, hasta {BOOK_FILE_LIMITS.cover.size}
               </span>
             </div>
-
             <div className="flex flex-wrap sm:flex-nowrap gap-4 items-start">
-              {coverPreview && (
-                <div className="w-20 h-28 rounded-xl border border-slate-200 overflow-hidden shrink-0 shadow-2xs bg-white">
-                  <img src={coverPreview} alt="Vista previa de portada" className="w-full h-full object-cover" />
-                </div>
-              )}
-
-              <div className="flex-1 space-y-2">
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handleCoverFileChange}
-                  className="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer"
-                />
-                {coverFile ? (
-                  <p className="text-[11px] text-emerald-700 flex items-center gap-1 font-medium">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>
-                      Seleccionado: {coverFile.name} ({(coverFile.size / 1024).toFixed(1)} KB)
-                    </span>
-                  </p>
-                ) : (
-                  <div className="flex items-center gap-1.5 pt-1">
-                    <span className="text-[10px] text-slate-400">O elegir muestra:</span>
-                    {SAMPLE_COVERS.slice(0, 4).map((cover, index) => (
-                      <button
-                        type="button"
-                        key={index}
-                        onClick={() => {
-                          setCoverUrl(cover);
-                          setCoverPreview(cover);
-                          setCoverFile(null);
-                        }}
-                        className="w-5 h-7 rounded border border-slate-200 overflow-hidden hover:ring-2 hover:ring-emerald-500"
-                      >
-                        <img src={cover} alt="cover option" className="w-full h-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
+              <div className="w-20 h-28 rounded-xl border border-slate-200 overflow-hidden shrink-0 bg-slate-200">
+                {coverUrl && (
+                  <img src={coverUrl} alt="Vista previa de la portada" className="w-full h-full object-cover" />
                 )}
+              </div>
+              <div className="flex-1 min-w-0 space-y-2">
+                <input
+                  id={ids.cover}
+                  type="file"
+                  accept={acceptFor('cover')}
+                  aria-describedby={ids.coverHelp}
+                  onChange={handleCoverChange}
+                  className={FILE_INPUT_CLASS}
+                />
+                <FileFeedback status={coverStatus} id={ids.coverHelp} />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-slate-500">O elegí una genérica:</span>
+                  {SAMPLE_COVERS.map((cover, index) => (
+                    <button
+                      type="button"
+                      key={cover}
+                      aria-label={`Usar portada genérica ${index + 1}`}
+                      aria-pressed={coverUrl === cover}
+                      onClick={() => {
+                        setCoverUrl(cover);
+                        setCoverStatus(IDLE);
+                      }}
+                      className="w-6 h-8 rounded border border-slate-200 overflow-hidden hover:ring-2 hover:ring-emerald-500 aria-pressed:ring-2 aria-pressed:ring-emerald-600"
+                    >
+                      <img src={cover} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* 2. Subir Archivo del Libro */}
-          <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-indigo-600" />
-                <span>Archivo Completo del Libro</span>
-              </label>
-              <span className="text-[11px] text-slate-500">
-                Formatos: PDF, EPUB, TXT (máx. {ASSET_CONSTRAINTS.bookFile.maxSizeLabel})
-              </span>
-            </div>
-
-            <input
-              type="file"
-              accept=".pdf,.epub,.txt,application/pdf,application/epub+zip,text/plain"
-              onChange={handleBookFileChange}
-              className="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
-            />
-
-            {bookFile ? (
-              <p className="text-[11px] text-indigo-700 flex items-center gap-1 font-medium">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>
-                  Listo para subir: {bookFile.name} ({(bookFile.size / 1024 / 1024).toFixed(2)} MB)
+          {condition === 'digital' && (
+            <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label
+                  htmlFor={ids.bookFile}
+                  className="text-xs font-semibold text-slate-800 flex items-center gap-1.5"
+                >
+                  <FileText className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                  Archivo del libro *
+                </label>
+                <span className="text-[11px] text-slate-500">
+                  {BOOK_FILE_LIMITS.bookFile.label}, hasta {BOOK_FILE_LIMITS.bookFile.size}
                 </span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Es el texto que leen los compradores en el lector. Sólo lo ven quienes lo compraron.
               </p>
-            ) : bookFileUrl ? (
-              <p className="text-[11px] text-slate-600 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Archivo cargado previamente en Storage.</span>
-              </p>
-            ) : null}
-          </div>
+              <input
+                id={ids.bookFile}
+                type="file"
+                accept={acceptFor('bookFile')}
+                aria-describedby={ids.bookFileHelp}
+                onChange={handleBookFileChange}
+                className={FILE_INPUT_CLASS}
+              />
+              {isContentLoading ? (
+                <p className="text-[11px] text-slate-500">Cargando el texto guardado…</p>
+              ) : (
+                <FileFeedback status={bookFileStatus} id={ids.bookFileHelp} />
+              )}
+              <button
+                type="button"
+                onClick={() => setIsTextEditorOpen(open => !open)}
+                aria-expanded={isTextEditorOpen}
+                aria-controls={ids.content}
+                className="text-[11px] font-semibold text-indigo-700 hover:underline"
+              >
+                {isTextEditorOpen ? 'Ocultar el texto' : 'Ver o pegar el texto a mano'}
+              </button>
+              {isTextEditorOpen && (
+                <textarea
+                  id={ids.content}
+                  aria-label="Texto completo del libro"
+                  rows={8}
+                  value={fullContent}
+                  onChange={event => setFullContent(event.target.value)}
+                  placeholder="Separá los párrafos con una línea en blanco."
+                  className={`${INPUT_CLASS} font-serif`}
+                />
+              )}
+            </div>
+          )}
 
-          {/* 3. Subir Muestra Gratuita */}
           <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-amber-600" />
-                <span>Archivo de Muestra Gratuita</span>
+              <label
+                htmlFor={ids.sampleFile}
+                className="text-xs font-semibold text-slate-800 flex items-center gap-1.5"
+              >
+                <FileText className="w-4 h-4 text-amber-600" aria-hidden="true" />
+                Muestra gratuita
               </label>
               <span className="text-[11px] text-slate-500">
-                Formatos: PDF, EPUB, TXT (máx. {ASSET_CONSTRAINTS.sampleFile.maxSizeLabel})
+                {BOOK_FILE_LIMITS.sampleFile.label}, hasta {BOOK_FILE_LIMITS.sampleFile.size}
               </span>
             </div>
-
             <input
+              id={ids.sampleFile}
               type="file"
-              accept=".pdf,.epub,.txt,application/pdf,application/epub+zip,text/plain"
+              accept={acceptFor('sampleFile')}
+              aria-describedby={ids.sampleFileHelp}
               onChange={handleSampleFileChange}
-              className="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100 cursor-pointer"
+              className={FILE_INPUT_CLASS}
             />
-
-            {sampleFile ? (
-              <p className="text-[11px] text-amber-700 flex items-center gap-1 font-medium">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>
-                  Listo para subir: {sampleFile.name} ({(sampleFile.size / 1024).toFixed(1)} KB)
-                </span>
-              </p>
-            ) : sampleFileUrl ? (
-              <p className="text-[11px] text-slate-600 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Muestra cargada previamente en Storage.</span>
-              </p>
-            ) : null}
+            <FileFeedback status={sampleFileStatus} id={ids.sampleFileHelp} />
+            <textarea
+              id={ids.sample}
+              aria-label="Texto de la muestra gratuita"
+              rows={4}
+              maxLength={MAX_SAMPLE_LENGTH}
+              value={sampleText}
+              onChange={event => setSampleText(event.target.value)}
+              placeholder="Fragmento que cualquiera puede leer antes de comprar. Podés subir un archivo o escribirlo acá."
+              className={`${INPUT_CLASS} font-serif`}
+            />
           </div>
         </div>
 
-        {/* Sinopsis / Descripción */}
         <div>
-          <label className="text-xs font-semibold text-slate-700 block mb-1">Sinopsis / Descripción</label>
-          <textarea
-            rows={3}
-            value={description}
-            onChange={event => setDescription(event.target.value)}
-            placeholder="Escribe la reseña descriptiva de la obra..."
-            className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 resize-none"
-          />
-        </div>
-
-        {/* Fragmento de muestra en texto */}
-        <div>
-          <label className="text-xs font-semibold text-slate-700 block mb-1 flex items-center justify-between">
-            <span>Fragmento de Muestra (Texto)</span>
-            <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-normal">
-              Lectura previa para compradores
-            </span>
+          <label htmlFor={ids.description} className={LABEL_CLASS}>
+            Sinopsis
           </label>
           <textarea
+            id={ids.description}
             rows={3}
-            value={sampleText}
-            onChange={event => setSampleText(event.target.value)}
-            placeholder="Fragmento inicial que los usuarios pueden leer directamente en la web..."
-            className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 font-serif"
+            maxLength={5000}
+            value={description}
+            onChange={event => setDescription(event.target.value)}
+            placeholder="De qué trata el libro, en pocas líneas."
+            className={`${INPUT_CLASS} resize-none`}
           />
         </div>
 
-        {/* Contenido completo digital (opcional / fallback para lector in-app) */}
-        {condition === 'digital' && (
-          <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1 flex items-center justify-between">
-              <span>Texto Completo del Libro (Lector Web)</span>
-              <span className="text-[10px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded font-normal">
-                Para el lector digital integrado tras la compra
-              </span>
-            </label>
-            <textarea
-              rows={3}
-              value={fullContent}
-              onChange={event => setFullContent(event.target.value)}
-              placeholder="Capítulo 1...\nTexto de la obra disponible en el lector web..."
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 font-serif"
-            />
-          </div>
+        {formError && (
+          <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800">
+            {formError}
+          </p>
         )}
       </div>
 
-      {/* Acciones del Modal: Guardar Borrador y Enviar a Revisión */}
       <div className="p-4 border-t border-slate-100 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
@@ -593,31 +645,24 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
         </button>
 
         <div className="flex items-center gap-2">
-          {uploadStatus && (
-            <div className="text-xs text-slate-500 flex items-center gap-1.5 mr-2">
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
-              <span>{uploadStatus}</span>
-            </div>
-          )}
-
+          {isSubmitting && <Loader2 className="w-4 h-4 animate-spin text-emerald-600" aria-label="Guardando" />}
           <button
             type="button"
-            disabled={isSubmitting}
+            disabled={isBusy}
             onClick={() => handleSubmit(false)}
-            className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs disabled:opacity-50"
+            className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50"
           >
-            <Save className="w-4 h-4 text-slate-600" />
-            <span>Guardar Borrador</span>
+            <Save className="w-4 h-4 text-slate-600" aria-hidden="true" />
+            Guardar borrador
           </button>
-
           <button
             type="button"
-            disabled={isSubmitting}
+            disabled={isBusy}
             onClick={() => handleSubmit(true)}
             className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/25 transition-all disabled:opacity-50"
           >
-            <Send className="w-4 h-4" />
-            <span>Enviar a Revisión</span>
+            <Send className="w-4 h-4" aria-hidden="true" />
+            Enviar a revisión
           </button>
         </div>
       </div>

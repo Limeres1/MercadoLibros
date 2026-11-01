@@ -59,6 +59,14 @@ Variables del servidor: `MP_ACCESS_TOKEN` (Access Token **de prueba** de una apl
 
 Sin `MP_ACCESS_TOKEN` el checkout lleva a `/pago/simulado`, donde se aprueba o rechaza el pago con los mismos estados (plan B para demos). La lógica de pedidos se prueba contra el emulador en `tests/server/`.
 
+## Páginas y progreso del lector
+
+El lector agrupa el texto completo en páginas de dos párrafos con `paginateReaderText`; el tamaño de letra y el tema no cambian sus números. Biblioteca y lector calculan el porcentaje con `readingProgress` y la misma cantidad de páginas, independiente de las páginas editoriales de la ficha.
+
+Al confirmar una compra digital, el servidor calcula `library.totalPages` desde `bookContents`. Para compras anteriores, al abrir el lector se compara el texto con la biblioteca: `POST /api/reader/sync` verifica la sesión y la propiedad del libro, y corrige la cantidad de páginas en una transacción. No crea compras ni modifica marcadores; mantiene la posición guardada dentro del rango disponible. Si falta el texto o falla la sincronización, no sustituye el contenido por la muestra y permite reintentar. Los libros retirados siguen usando este flujo para sus compradores.
+
+La corrección requiere las funciones de servidor y Firebase Admin configurados, igual que los pagos. Las reglas del cliente siguen permitiendo modificar únicamente `lastReadPage` y `bookmarks`. Los tests de paginación y pantallas corren con `npm test`; las transacciones, pagos y permisos, con `npm run test:rules`.
+
 ## Reglas de Firestore
 
 `firestore.rules` define quién lee y escribe cada colección; los tests están en `tests/rules/` y corren contra el emulador con `npm run test:rules` (necesita Java 21: `brew install openjdk@21`). Se publican con `npx firebase deploy --only firestore:rules`.

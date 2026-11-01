@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { deleteDoc, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 
 import { useToast } from '@/components/ui/Toast';
-import { STORAGE_KEYS } from '@/constants/storageKeys';
 import { useSession } from '@/features/auth/SessionProvider';
 import { useRequireLogin } from '@/features/auth/useRequireLogin';
-import { usePersistentState } from '@/hooks/usePersistentState';
 import { createSafeContext } from '@/lib/createSafeContext';
+import { getErrorMessage } from '@/lib/errors';
+import { firestoreRefs } from '@/services/firestore';
+import { FavoriteEntry } from '@/types';
 
 interface FavoritesContextValue {
   favorites: string[];
@@ -20,24 +22,50 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { currentUser } = useSession();
   const requireLogin = useRequireLogin();
   const { showToast } = useToast();
-  const [byUser, setByUser] = usePersistentState<Record<string, string[]>>(STORAGE_KEYS.favorites, {});
+  const showToastRef = useRef(showToast);
+  const [entries, setEntries] = useState<FavoriteEntry[]>([]);
+  const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
+  const userId = currentUser?.id;
 
-  const favorites = currentUser ? (byUser[currentUser.id] ?? []) : [];
+  useEffect(() => {
+    showToastRef.current = showToast;
+  });
 
+  useEffect(() => {
+    setEntries([]);
+    setLoadedUserId(userId ?? null);
+    if (!userId) return;
+    return onSnapshot(
+      firestoreRefs.favorites(userId),
+      snapshot => setEntries(snapshot.docs.map(favoriteDoc => favoriteDoc.data())),
+      error => showToastRef.current(getErrorMessage(error), 'error'),
+    );
+  }, [userId]);
+
+  const favorites = loadedUserId === userId ? entries.map(entry => entry.bookId) : [];
   const isFavorite = (bookId: string) => favorites.includes(bookId);
 
   const toggleFavorite = (bookId: string) => {
     const user = requireLogin('Inicia sesión para guardar libros en tus favoritos.');
     if (!user) return;
+    const favoriteRef = doc(firestoreRefs.favorites(user.id), bookId);
     const exists = favorites.includes(bookId);
-    setByUser(prev => ({
-      ...prev,
-      [user.id]: exists ? favorites.filter(id => id !== bookId) : [...favorites, bookId],
-    }));
-    showToast(
-      exists ? 'Libro removido de favoritos.' : '¡Libro agregado a tus favoritos!',
-      exists ? 'info' : 'success',
-    );
+    const showcase = currentUser?.favoriteBookIds ?? [];
+    const write = exists
+      ? deleteDoc(favoriteRef).then(() =>
+          showcase.includes(bookId)
+            ? updateDoc(firestoreRefs.user(user.id), { favoriteBookIds: showcase.filter(id => id !== bookId) })
+            : undefined,
+        )
+      : setDoc(favoriteRef, { bookId, createdAt: new Date().toISOString() });
+    void write
+      .then(() =>
+        showToastRef.current(
+          exists ? 'Libro removido de favoritos.' : '¡Libro agregado a tus favoritos!',
+          exists ? 'info' : 'success',
+        ),
+      )
+      .catch(error => showToastRef.current(getErrorMessage(error), 'error'));
   };
 
   return <Provider value={{ favorites, isFavorite, toggleFavorite }}>{children}</Provider>;

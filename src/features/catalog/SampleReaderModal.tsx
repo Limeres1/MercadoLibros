@@ -3,6 +3,7 @@ import { Heart, Share2, ShoppingBag, Sparkles, X } from 'lucide-react';
 
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
+import { isOutOfStock } from '@/features/catalog/catalogFilters';
 import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
 import { useCart } from '@/features/shop/CartProvider';
 import { Book } from '@/types';
@@ -17,6 +18,8 @@ export const SampleReaderModal: React.FC<SampleReaderModalProps> = ({ book, onCl
   const { isFavorite, toggleFavorite } = useFavorites();
   const { showToast } = useToast();
 
+  const sample = book.sampleText?.trim();
+  const canBuy = book.status === 'published' && !isOutOfStock(book);
   const isFav = isFavorite(book.id);
 
   const handleShare = () => {
@@ -30,15 +33,15 @@ export const SampleReaderModal: React.FC<SampleReaderModalProps> = ({ book, onCl
       labelledBy="sample-title"
       className="max-w-2xl bg-[#FDFBF7] text-[#2C2416] rounded-2xl border-amber-900/10"
     >
-      <div className="flex items-center justify-between px-6 py-4 border-b border-amber-900/10 bg-[#FAF6EE]">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap shrink-0 px-4 sm:px-6 py-4 border-b border-amber-900/10 bg-[#FAF6EE]">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <img
             src={book.coverUrl}
             alt={book.title}
             className="w-10 h-14 object-cover rounded shadow-xs border border-amber-900/20"
           />
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200/60 text-amber-900 uppercase tracking-wider">
                 Muestra Gratuita
               </span>
@@ -51,7 +54,7 @@ export const SampleReaderModal: React.FC<SampleReaderModalProps> = ({ book, onCl
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => toggleFavorite(book.id)}
             className={`p-2 rounded-lg transition-colors ${
@@ -78,7 +81,7 @@ export const SampleReaderModal: React.FC<SampleReaderModalProps> = ({ book, onCl
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 sm:p-10 font-serif leading-relaxed text-base sm:text-lg text-slate-800 space-y-5 selection:bg-amber-200">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-6 sm:p-10 font-serif leading-relaxed text-base sm:text-lg text-slate-800 space-y-5 selection:bg-amber-200">
         <div className="text-center pb-4 border-b border-amber-900/10">
           <span className="text-xs font-sans uppercase tracking-widest text-amber-800 font-bold block mb-1">
             Fragmento de Cortesía
@@ -87,30 +90,37 @@ export const SampleReaderModal: React.FC<SampleReaderModalProps> = ({ book, onCl
           <p className="text-sm text-slate-600 font-sans mt-0.5">{book.author}</p>
         </div>
 
-        <div className="prose max-w-none text-slate-800 whitespace-pre-line leading-loose text-justify">
-          {book.sampleText || 'Fragmento no disponible en este momento.'}
-        </div>
+        <section
+          aria-label="Texto de la muestra"
+          className="prose max-w-none text-slate-800 whitespace-pre-line leading-loose text-justify wrap-anywhere"
+        >
+          {sample || 'Fragmento no disponible en este momento.'}
+        </section>
 
-        <div className="my-8 p-6 rounded-xl bg-amber-50/70 border border-amber-200/80 text-center font-sans">
-          <Sparkles className="w-6 h-6 text-amber-600 mx-auto mb-2" />
-          <h4 className="font-bold text-slate-900 text-sm mb-1">Fin del fragmento de muestra</h4>
-          <p className="text-xs text-slate-600 max-w-md mx-auto mb-4">
-            ¿Deseas continuar leyendo la obra completa? Adquiere tu ejemplar digital o físico de inmediato.
-          </p>
-          <button
-            onClick={() => {
-              addToCart(book);
-              onClose();
-            }}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-600/20 transition-all hover:scale-102"
-          >
-            <ShoppingBag className="w-4 h-4" />
-            <span>Comprar por ${book.price.toFixed(2)}</span>
-          </button>
-        </div>
+        {sample && (
+          <div className="my-8 p-6 rounded-xl bg-amber-50/70 border border-amber-200/80 text-center font-sans">
+            <Sparkles className="w-6 h-6 text-amber-600 mx-auto mb-2" />
+            <h4 className="font-bold text-slate-900 text-sm mb-1">Fin del fragmento de muestra</h4>
+            <p className="text-xs text-slate-600 max-w-md mx-auto mb-4">
+              ¿Deseas continuar leyendo la obra completa? Adquiere tu ejemplar digital o físico de inmediato.
+            </p>
+            <button
+              disabled={!canBuy}
+              onClick={() => {
+                if (!canBuy) return;
+                addToCart(book);
+                onClose();
+              }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-600/20 transition-all enabled:hover:scale-102 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <ShoppingBag className="w-4 h-4" />
+              <span>{canBuy ? `Comprar por $${book.price.toFixed(2)}` : 'No disponible para comprar'}</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      <div className="px-6 py-3 border-t border-amber-900/10 bg-[#FAF6EE] flex items-center justify-between text-xs text-slate-500 font-sans">
+      <div className="shrink-0 px-6 py-3 border-t border-amber-900/10 bg-[#FAF6EE] flex items-center justify-between text-xs text-slate-500 font-sans">
         <span>
           Género: {book.genre} • {book.language}
         </span>

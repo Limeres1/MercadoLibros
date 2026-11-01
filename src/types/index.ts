@@ -46,8 +46,6 @@ export interface Book {
   genre: string;
   language: string;
   coverUrl: string;
-  fileUrl?: string;
-  sampleUrl?: string;
   sampleText: string;
   sellerId: string;
   sellerName: string;

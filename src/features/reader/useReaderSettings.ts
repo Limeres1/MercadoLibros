@@ -1,22 +1,43 @@
+import { useEffect, useState } from 'react';
+
+import { READER_FONT_SIZE } from '@/constants/reader';
+import { READER_THEMES } from '@/constants/statuses';
 import { STORAGE_KEYS } from '@/constants/storageKeys';
-import { usePersistentState } from '@/hooks/usePersistentState';
+import { readJSON, writeJSON } from '@/lib/storage';
 import { ReaderSettings } from '@/types';
 
 const DEFAULT_SETTINGS: ReaderSettings = {
-  fontSize: 18,
+  fontSize: READER_FONT_SIZE.default,
   theme: 'sepia',
   fontFamily: 'serif',
   lineHeight: 'relaxed',
 };
 
+function normalizeSettings(value: unknown): ReaderSettings {
+  const saved = value && typeof value === 'object' && !Array.isArray(value) ? (value as Partial<ReaderSettings>) : {};
+  const size = saved.fontSize;
+  const fontSize =
+    typeof size === 'number' && Number.isFinite(size)
+      ? Math.min(
+          READER_FONT_SIZE.max,
+          Math.max(READER_FONT_SIZE.min, Math.round(size / READER_FONT_SIZE.step) * READER_FONT_SIZE.step),
+        )
+      : READER_FONT_SIZE.default;
+  const theme = saved.theme && READER_THEMES.includes(saved.theme) ? saved.theme : DEFAULT_SETTINGS.theme;
+  return { ...DEFAULT_SETTINGS, ...saved, fontSize, theme };
+}
+
 export function useReaderSettings() {
-  const [readerSettings, setReaderSettings] = usePersistentState<ReaderSettings>(
-    STORAGE_KEYS.readerSettings,
-    DEFAULT_SETTINGS,
+  const [readerSettings, setReaderSettings] = useState(() =>
+    normalizeSettings(readJSON<unknown>(STORAGE_KEYS.readerSettings, DEFAULT_SETTINGS)),
   );
 
+  useEffect(() => {
+    writeJSON(STORAGE_KEYS.readerSettings, readerSettings);
+  }, [readerSettings]);
+
   const updateReaderSettings = (settings: Partial<ReaderSettings>) =>
-    setReaderSettings(prev => ({ ...prev, ...settings }));
+    setReaderSettings(prev => normalizeSettings({ ...prev, ...settings }));
 
   return { readerSettings, updateReaderSettings };
 }
