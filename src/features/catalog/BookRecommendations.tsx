@@ -148,7 +148,11 @@ export const BookRecommendations: React.FC = () => {
                     to={paths.book(book.id)}
                     className="flex h-full gap-3 rounded-xl border border-slate-200 bg-white p-3 hover:border-violet-300 focus-visible:outline-2 focus-visible:outline-violet-700"
                   >
-                    <img src={book.coverUrl} alt="" className="h-24 w-16 shrink-0 rounded object-cover" />
+                    <img
+                      src={book.coverUrl}
+                      alt=""
+                      className="h-24 w-16 shrink-0 rounded bg-slate-200 object-cover ring-1 ring-slate-900/5"
+                    />
                     <span className="min-w-0">
                       <span className="block font-serif font-semibold leading-snug text-slate-900">{book.title}</span>
                       <span className="block text-xs text-slate-500">{book.author}</span>
