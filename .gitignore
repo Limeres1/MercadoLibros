@@ -8,4 +8,3 @@ coverage/
 !.env.example
 docs/
 *serviceAccount*.json
-.env.local

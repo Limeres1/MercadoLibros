@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   }),
   query: vi.fn((collection: unknown, ...constraints: unknown[]) => ({ collection, constraints })),
   setDoc: vi.fn(),
+  getDoc: vi.fn(),
   updateDoc: vi.fn(),
   where: vi.fn((...args: unknown[]) => args),
 }));
@@ -36,6 +37,7 @@ vi.mock('firebase/firestore', () => ({
   onSnapshot: mocks.onSnapshot,
   query: mocks.query,
   setDoc: mocks.setDoc,
+  getDoc: mocks.getDoc,
   updateDoc: mocks.updateDoc,
   where: mocks.where,
 }));
@@ -121,5 +123,36 @@ describe('ReportsProvider', () => {
 
     expect(mocks.setDoc).not.toHaveBeenCalled();
     expect(mocks.showToast).toHaveBeenLastCalledWith('Ya enviaste una denuncia sobre este contenido.', 'info');
+  });
+
+  it('recognizes a duplicate report even before the user reports finished loading', async () => {
+    mocks.setDoc.mockRejectedValue({ code: 'permission-denied' });
+    mocks.getDoc.mockResolvedValue({ exists: () => true });
+    render(
+      <ReportsProvider>
+        <ReportsProbe />
+      </ReportsProvider>,
+    );
+
+    await act(async () => {
+      expect(await reports.createReport(target, 'Spam o publicidad encubierta', '')).toBe(false);
+    });
+
+    expect(mocks.showToast).toHaveBeenLastCalledWith('Ya enviaste una denuncia sobre este contenido.', 'info');
+  });
+
+  it('marks content the user already reported', async () => {
+    render(
+      <ReportsProvider>
+        <ReportsProbe />
+      </ReportsProvider>,
+    );
+    await act(async () =>
+      mocks.reportListener?.({
+        docs: [{ data: () => ({ id: 'buyer-1_book_book-1', createdAt: '2026-11-01T00:00:00.000Z' }) }],
+      }),
+    );
+    expect(reports.hasReported({ type: 'book', id: 'book-1' })).toBe(true);
+    expect(reports.hasReported({ type: 'review', id: 'book-1' })).toBe(false);
   });
 });

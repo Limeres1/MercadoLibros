@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { doc, onSnapshot, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, query, setDoc, updateDoc, where } from 'firebase/firestore';
 
 import { useToast } from '@/components/ui/Toast';
 import { docIds } from '@/constants/firestore';
@@ -18,6 +18,7 @@ export interface ReportTarget {
 
 interface ReportsContextValue {
   reports: Report[];
+  hasReported: (target: Pick<ReportTarget, 'type' | 'id'>) => boolean;
   createReport: (target: ReportTarget, reason: string, details: string) => Promise<boolean>;
   setReportStatus: (reportId: string, status: Report['status'], adminNote?: string) => Promise<boolean>;
 }
@@ -56,6 +57,9 @@ export const ReportsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   }, [userId, isAdmin]);
 
+  const hasReported = (target: Pick<ReportTarget, 'type' | 'id'>) =>
+    Boolean(userId) && reports.some(report => report.id === docIds.report(userId ?? '', target.type, target.id));
+
   const createReport = async (target: ReportTarget, reason: string, details: string) => {
     const user = requireLogin('Iniciá sesión para denunciar contenido.');
     if (!user) return false;
@@ -88,7 +92,12 @@ export const ReportsProvider: React.FC<{ children: React.ReactNode }> = ({ child
       showToast('Denuncia enviada. Un administrador la revisará a la brevedad.', 'success');
       return true;
     } catch (error) {
-      showToast(getErrorMessage(error), 'error');
+      const existing = await getDoc(reportRef).catch(() => null);
+      if (existing?.exists()) {
+        showToast('Ya enviaste una denuncia sobre este contenido.', 'info');
+      } else {
+        showToast(getErrorMessage(error), 'error');
+      }
       return false;
     }
   };
@@ -109,5 +118,5 @@ export const ReportsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  return <Provider value={{ reports, createReport, setReportStatus }}>{children}</Provider>;
+  return <Provider value={{ reports, hasReported, createReport, setReportStatus }}>{children}</Provider>;
 };

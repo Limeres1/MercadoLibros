@@ -27,7 +27,7 @@ import { useBook } from '@/features/catalog/BooksProvider';
 import { isOutOfStock } from '@/features/catalog/catalogFilters';
 import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
 import { ReportModal } from '@/features/catalog/reports/ReportModal';
-import { ReportTarget } from '@/features/catalog/reports/ReportsProvider';
+import { ReportTarget, useReports } from '@/features/catalog/reports/ReportsProvider';
 import { BookReviews } from '@/features/catalog/reviews/BookReviews';
 import { SampleReaderModal } from '@/features/catalog/SampleReaderModal';
 import { useLibrary } from '@/features/reader/LibraryProvider';
@@ -89,6 +89,8 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
   const cartQuantity = getCartQuantity(book.id);
   const maxQuantity = getMaxQuantity(book);
   const statusNotice = STATUS_NOTICES[book.status];
+
+  const { hasReported } = useReports();
 
   const openReport = (target: ReportTarget) => {
     if (requireLogin('Iniciá sesión para denunciar contenido.')) setReportTarget(target);
@@ -316,14 +318,21 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
             </dl>
           </section>
 
-          <button
-            type="button"
-            onClick={() => openReport({ type: 'book', id: book.id, title: book.title })}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-700"
-          >
-            <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
-            Denunciar esta publicación
-          </button>
+          {hasReported({ type: 'book', id: book.id }) ? (
+            <p className="flex items-center gap-1.5 text-xs text-slate-500">
+              <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+              Ya denunciaste esta publicación. La revisa la administración.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => openReport({ type: 'book', id: book.id, title: book.title })}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-700"
+            >
+              <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+              Denunciar esta publicación
+            </button>
+          )}
         </div>
       </article>
 
