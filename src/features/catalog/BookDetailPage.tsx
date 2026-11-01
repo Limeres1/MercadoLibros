@@ -306,6 +306,20 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
             <p className="mt-2 max-w-prose whitespace-pre-line font-serif text-[15px] leading-7 text-slate-700">
               {book.description || 'El vendedor todavía no cargó una sinopsis.'}
             </p>
+            {book.keywords && book.keywords.length > 0 && (
+              <ul aria-label="Palabras clave" className="mt-3 flex flex-wrap gap-1.5">
+                {book.keywords.map(keyword => (
+                  <li key={keyword}>
+                    <Link
+                      to={paths.catalog({ [CATALOG_PARAMS.search]: keyword })}
+                      className="inline-block rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs text-slate-600 hover:border-amber-400 hover:text-amber-800"
+                    >
+                      {keyword}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           <section aria-labelledby="detalles">

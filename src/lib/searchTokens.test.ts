@@ -20,6 +20,15 @@ describe('search tokens', () => {
     expect(isbnToken('garcia')).toBeNull();
   });
 
+  it('D4: makes the keywords searchable', () => {
+    const tokens = buildSearchTokens({
+      title: 'Ficciones',
+      author: 'Borges',
+      keywords: ['laberintos', 'buenos aires'],
+    });
+    expect(tokens).toEqual(expect.arrayContaining(['laberintos', 'lab', 'buenos', 'aires']));
+  });
+
   it('splits a query into normalized words', () => {
     expect(tokenizeQuery('  García,  MÁRQUEZ ')).toEqual(['garcia', 'marquez']);
   });

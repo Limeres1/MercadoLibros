@@ -139,7 +139,8 @@ service cloud.firestore {
         && isText(data.sellerName, 1, 120)
         && data.pages is int && data.pages >= 0 && data.pages <= 10000
         && data.publicationYear is int && data.publicationYear >= 0 && data.publicationYear <= 2100
-        && (!('stock' in data) || (data.stock is int && data.stock >= 0));
+        && (!('stock' in data) || (data.stock is int && data.stock >= 0))
+        && (!('keywords' in data) || (data.keywords is list && data.keywords.size() <= 8));
     }
 
     function hasReviewed(bookId) {

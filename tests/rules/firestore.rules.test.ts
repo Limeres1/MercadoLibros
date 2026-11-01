@@ -182,6 +182,15 @@ describe('books', () => {
     await assertSucceeds(updateDoc(ref, { price: 99, status: 'pending_review' }));
   });
 
+  it('D4: keeps the keyword list of a book short', async () => {
+    const db = dbAs(SELLER);
+    await assertSucceeds(setDoc(doc(db, COLLECTIONS.books, 'book_new'), book({ keywords: ['misterio', 'tango'] })));
+    await assertFails(
+      setDoc(doc(db, COLLECTIONS.books, 'book_many'), book({ keywords: Array.from({ length: 9 }, String) })),
+    );
+    await assertFails(setDoc(doc(db, COLLECTIONS.books, 'book_text'), book({ keywords: 'misterio' })));
+  });
+
   it('blocked sellers cannot publish books', async () => {
     await testEnv.withSecurityRulesDisabled(context =>
       updateDoc(doc(context.firestore(), COLLECTIONS.users, SELLER), { isBlocked: true }),

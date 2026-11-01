@@ -57,6 +57,7 @@ export function useSellerBooks() {
       language: bookData.language || 'Español',
       coverUrl: bookData.coverUrl || DEFAULT_COVER,
       sampleText: bookData.sampleText || '',
+      keywords: bookData.keywords ?? [],
       sellerId: currentUser.id,
       sellerName: currentUser.displayName,
       status: 'draft',

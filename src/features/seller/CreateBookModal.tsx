@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
@@ -9,6 +9,7 @@ import {
   Loader2,
   Save,
   Send,
+  Sparkles,
   Upload,
   X,
 } from 'lucide-react';
@@ -17,6 +18,8 @@ import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { BOOK_GENRES, BOOK_LANGUAGES } from '@/constants/catalog';
 import { useBooks } from '@/features/catalog/BooksProvider';
+import { AIBookProposal, generateBookProposal, mergeKeywords } from '@/features/seller/aiBookProposal';
+import { AIProposalPanel } from '@/features/seller/AIProposalPanel';
 import {
   BOOK_FILE_LIMITS,
   BookFileKind,
@@ -28,6 +31,7 @@ import {
   takeSample,
   validateBookFile,
 } from '@/features/seller/bookFiles';
+import { KeywordsField } from '@/features/seller/KeywordsField';
 import { useSellerBooks } from '@/features/seller/useSellerBooks';
 import { Book, BookCondition } from '@/types';
 
@@ -109,6 +113,11 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
   const [fullContent, setFullContent] = useState('');
   const [isContentLoading, setIsContentLoading] = useState(false);
   const [isTextEditorOpen, setIsTextEditorOpen] = useState(false);
+  const [keywords, setKeywords] = useState<string[]>([]);
+  const [aiProposal, setAiProposal] = useState<AIBookProposal | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const aiRequestRef = useRef(0);
 
   const [coverStatus, setCoverStatus] = useState<FileStatus>(IDLE);
   const [bookFileStatus, setBookFileStatus] = useState<FileStatus>(IDLE);
@@ -131,6 +140,7 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
     setPublicationYear(String(bookToEdit.publicationYear));
     setStock(String(bookToEdit.stock ?? 0));
     setSampleText(bookToEdit.sampleText || '');
+    setKeywords(bookToEdit.keywords ?? []);
     if (bookToEdit.condition !== 'digital') return;
     setIsContentLoading(true);
     loadBookContent(bookToEdit.id)
@@ -207,6 +217,43 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
     }
   };
 
+  const handleGenerate = async () => {
+    const request = ++aiRequestRef.current;
+    setAiError(null);
+    setIsGenerating(true);
+    try {
+      const proposal = await generateBookProposal({
+        title,
+        author,
+        genre,
+        language,
+        excerpt: sampleText.trim() || fullContent.trim(),
+      });
+      if (request === aiRequestRef.current) setAiProposal(proposal);
+    } catch (error) {
+      if (request !== aiRequestRef.current) return;
+      setAiProposal(null);
+      setAiError(error instanceof Error ? error.message : 'La IA no está disponible en este momento.');
+    } finally {
+      if (request === aiRequestRef.current) setIsGenerating(false);
+    }
+  };
+
+  const discardProposal = () => {
+    aiRequestRef.current++;
+    setAiProposal(null);
+    setIsGenerating(false);
+  };
+
+  const applyProposal = () => {
+    if (!aiProposal) return;
+    setDescription(aiProposal.description.trim());
+    setGenre(aiProposal.genre);
+    setKeywords(current => mergeKeywords(current, aiProposal.keywords));
+    setAiProposal(null);
+    showToast('Propuesta aplicada. Podés seguir editando antes de guardar.', 'success');
+  };
+
   const validate = (submitForReview: boolean) => {
     if (!title.trim() || !author.trim()) return 'Completá el título y el autor del libro.';
     const numericPrice = Number(price);
@@ -245,6 +292,7 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
           publicationYear: Math.round(Number(publicationYear)) || new Date().getFullYear(),
           ...(condition === 'digital' ? {} : { stock: Number(stock) }),
           sampleText: sampleText.trim(),
+          keywords,
         },
         submitForReview,
         condition === 'digital' ? fullContent.trim() : undefined,
@@ -275,6 +323,8 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
       'sampleFile',
       'sampleFileHelp',
       'description',
+      'aiStatus',
+      'keywords',
       'sample',
       'content',
     ].map(name => [name, `${fieldId}-${name}`]),
@@ -612,19 +662,73 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
           </div>
         </div>
 
-        <div>
-          <label htmlFor={ids.description} className={LABEL_CLASS}>
-            Sinopsis
-          </label>
+        <div className="space-y-3 pt-2 border-t border-slate-100">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label htmlFor={ids.description} className="text-xs font-semibold text-slate-700">
+              Sinopsis
+            </label>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={isGenerating || !title.trim()}
+              aria-describedby={ids.aiStatus}
+              className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-800 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isGenerating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {isGenerating ? 'Generando…' : aiProposal ? 'Generar otra' : 'Generar con IA'}
+            </button>
+          </div>
+          <div id={ids.aiStatus} aria-live="polite" className="text-[11px]">
+            {aiError ? (
+              <p role="alert" className="flex items-start gap-1 font-medium text-rose-700">
+                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                {aiError} Podés completar la ficha a mano.
+              </p>
+            ) : (
+              !title.trim() && (
+                <p className="text-slate-500">
+                  Escribí el título y la IA te propone sinopsis, género y palabras clave.
+                </p>
+              )
+            )}
+          </div>
+          {aiProposal && (
+            <AIProposalPanel
+              proposal={aiProposal}
+              replacesDescription={Boolean(description.trim())}
+              onChange={setAiProposal}
+              onApply={applyProposal}
+              onDiscard={discardProposal}
+            />
+          )}
           <textarea
             id={ids.description}
-            rows={3}
+            rows={4}
             maxLength={5000}
             value={description}
             onChange={event => setDescription(event.target.value)}
             placeholder="De qué trata el libro, en pocas líneas."
-            className={`${INPUT_CLASS} resize-none`}
+            className={`${INPUT_CLASS} resize-y`}
           />
+          <div>
+            <label htmlFor={ids.keywords} className={LABEL_CLASS}>
+              Palabras clave
+            </label>
+            <p className="mb-2 text-[11px] text-slate-500">
+              Ayudan a encontrar el libro en el buscador. Separalas con coma o Enter.
+            </p>
+            <KeywordsField
+              id={ids.keywords}
+              listLabel="Palabras clave cargadas"
+              keywords={keywords}
+              onChange={setKeywords}
+              inputClassName={INPUT_CLASS}
+            />
+          </div>
         </div>
 
         {formError && (
