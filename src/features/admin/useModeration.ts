@@ -26,8 +26,8 @@ export function useModeration() {
       status: 'withdrawn',
       rejectionReason: 'Retirado por el administrador por incumplimiento de normativas.',
     });
-    if (!withdrawn) return;
-    showToast('Libro retirado de la venta por administración.', 'info');
+    if (withdrawn) showToast('Libro retirado de la venta por administración.', 'info');
+    return withdrawn;
   };
 
   const resolveReport = async (reportId: string, action: 'dismiss' | 'remove_target') => {
@@ -36,7 +36,7 @@ export function useModeration() {
 
     if (action === 'remove_target') {
       if (report.targetType === 'book') {
-        await withdrawBook(report.targetId);
+        if (!(await withdrawBook(report.targetId))) return;
       } else {
         try {
           await deleteReview(report.targetId);
@@ -47,11 +47,12 @@ export function useModeration() {
       }
     }
 
-    setReportStatus(
+    const updated = await setReportStatus(
       reportId,
       action === 'dismiss' ? 'dismissed' : 'resolved',
       action === 'dismiss' ? 'Desestimada por falta de pruebas' : 'Contenido retirado por infracción',
     );
+    if (!updated) return;
     showToast(`Denuncia procesada: ${action === 'dismiss' ? 'Desestimada' : 'Contenido dado de baja'}`, 'success');
   };
 

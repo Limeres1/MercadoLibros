@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { doc, getDoc, onSnapshot, query, setDoc, updateDoc, where } from 'firebase/firestore';
 
 import { useToast } from '@/components/ui/Toast';
 import { docIds } from '@/constants/firestore';
-import { STORAGE_KEYS } from '@/constants/storageKeys';
-import { INITIAL_REPORTS } from '@/data/initialData';
 import { useSession } from '@/features/auth/SessionProvider';
-import { usePersistentState } from '@/hooks/usePersistentState';
+import { useRequireLogin } from '@/features/auth/useRequireLogin';
 import { createSafeContext } from '@/lib/createSafeContext';
+import { getErrorMessage } from '@/lib/errors';
+import { firestoreRefs } from '@/services/firestore';
 import { Report } from '@/types';
 
 export interface ReportTarget {
@@ -17,8 +18,9 @@ export interface ReportTarget {
 
 interface ReportsContextValue {
   reports: Report[];
-  createReport: (target: ReportTarget, reason: string, details: string) => Promise<void>;
-  setReportStatus: (reportId: string, status: Report['status'], adminNote?: string) => void;
+  hasReported: (target: Pick<ReportTarget, 'type' | 'id'>) => boolean;
+  createReport: (target: ReportTarget, reason: string, details: string) => Promise<boolean>;
+  setReportStatus: (reportId: string, status: Report['status'], adminNote?: string) => Promise<boolean>;
 }
 
 const [Provider, useReports] = createSafeContext<ReportsContextValue>('useReports');
@@ -26,30 +28,95 @@ export { useReports };
 
 export const ReportsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useSession();
+  const requireLogin = useRequireLogin();
   const { showToast } = useToast();
-  const [reports, setReports] = usePersistentState<Report[]>(STORAGE_KEYS.reports, INITIAL_REPORTS);
+  const showToastRef = useRef(showToast);
+  const [reports, setReports] = useState<Report[]>([]);
+  const userId = currentUser?.id;
+  const isAdmin = currentUser?.role === 'admin';
+
+  useEffect(() => {
+    showToastRef.current = showToast;
+  });
+
+  useEffect(() => {
+    setReports([]);
+    if (!userId) return;
+    const reportsQuery = isAdmin
+      ? firestoreRefs.reports()
+      : query(firestoreRefs.reports(), where('reporterId', '==', userId));
+    return onSnapshot(
+      reportsQuery,
+      snapshot =>
+        setReports(
+          snapshot.docs
+            .map(reportDoc => reportDoc.data())
+            .sort((first, second) => second.createdAt.localeCompare(first.createdAt)),
+        ),
+      error => showToastRef.current(getErrorMessage(error), 'error'),
+    );
+  }, [userId, isAdmin]);
+
+  const hasReported = (target: Pick<ReportTarget, 'type' | 'id'>) =>
+    Boolean(userId) && reports.some(report => report.id === docIds.report(userId ?? '', target.type, target.id));
 
   const createReport = async (target: ReportTarget, reason: string, details: string) => {
-    if (!currentUser) return;
-    const report: Report = {
-      id: docIds.report(currentUser.id, target.type, target.id),
-      reporterId: currentUser.id,
-      reporterName: currentUser.displayName,
-      targetType: target.type,
-      targetId: target.id,
-      targetTitle: target.title,
-      reason,
-      details,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-    };
-    setReports(prev => [report, ...prev.filter(existing => existing.id !== report.id)]);
-    showToast('Denuncia enviada. Un administrador la revisará a la brevedad.', 'success');
+    const user = requireLogin('Iniciá sesión para denunciar contenido.');
+    if (!user) return false;
+    if (!reason.trim() || reason.length > 200 || details.length > 2000) {
+      showToast('Revisá el motivo y los detalles de la denuncia.', 'error');
+      return false;
+    }
+
+    const reportId = docIds.report(user.id, target.type, target.id);
+    if (reports.some(report => report.id === reportId)) {
+      showToast('Ya enviaste una denuncia sobre este contenido.', 'info');
+      return false;
+    }
+
+    const reportRef = doc(firestoreRefs.reports(), reportId);
+    try {
+      const report: Report = {
+        id: reportId,
+        reporterId: user.id,
+        reporterName: user.displayName,
+        targetType: target.type,
+        targetId: target.id,
+        targetTitle: target.title,
+        reason: reason.trim(),
+        details: details.trim(),
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      };
+      await setDoc(reportRef, report);
+      showToast('Denuncia enviada. Un administrador la revisará a la brevedad.', 'success');
+      return true;
+    } catch (error) {
+      const existing = await getDoc(reportRef).catch(() => null);
+      if (existing?.exists()) {
+        showToast('Ya enviaste una denuncia sobre este contenido.', 'info');
+      } else {
+        showToast(getErrorMessage(error), 'error');
+      }
+      return false;
+    }
   };
 
-  const setReportStatus = (reportId: string, status: Report['status'], adminNote?: string) => {
-    setReports(prev => prev.map(report => (report.id === reportId ? { ...report, status, adminNote } : report)));
+  const setReportStatus = async (reportId: string, status: Report['status'], adminNote?: string) => {
+    if (!isAdmin || !userId || status === 'pending') return false;
+    try {
+      await updateDoc(doc(firestoreRefs.reports(), reportId), {
+        status,
+        ...(adminNote === undefined ? {} : { adminNote }),
+        resolvedBy: userId,
+        resolvedAt: new Date().toISOString(),
+      });
+      return true;
+    } catch (error) {
+      showToast(getErrorMessage(error), 'error');
+      return false;
+    }
   };
 
-  return <Provider value={{ reports, createReport, setReportStatus }}>{children}</Provider>;
+  return <Provider value={{ reports, hasReported, createReport, setReportStatus }}>{children}</Provider>;
 };

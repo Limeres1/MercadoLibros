@@ -42,6 +42,7 @@ vi.mock('@/features/shop/CartProvider', () => ({
 vi.mock('@/features/reader/LibraryProvider', () => ({ useLibrary: () => ({ hasPurchased: () => false }) }));
 vi.mock('@/features/catalog/reviews/BookReviews', () => ({ BookReviews: () => null }));
 vi.mock('@/features/catalog/reports/ReportModal', () => ({ ReportModal: () => null }));
+vi.mock('@/features/catalog/reports/ReportsProvider', () => ({ useReports: () => ({ hasReported: () => false }) }));
 
 const sampleBook = (overrides: Partial<Book> = {}): Book => ({
   ...INITIAL_BOOKS[0],
