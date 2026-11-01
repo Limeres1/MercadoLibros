@@ -1,4 +1,4 @@
-import { Book, BookContent, LibraryItem, Order, Report, Review, UserProfile } from '@/types';
+import { Book, BookContent, LibraryItem, Order, Review, UserProfile } from '@/types';
 
 export const INITIAL_USERS: UserProfile[] = [
   {
@@ -493,32 +493,5 @@ export const INITIAL_LIBRARY: LibraryItem[] = [
         createdAt: '2025-02-22T11:45:00Z',
       },
     ],
-  },
-];
-
-export const INITIAL_REPORTS: Report[] = [
-  {
-    id: 'rep_1',
-    reporterId: 'user_buyer_1',
-    reporterName: 'Sofía Ramos',
-    targetType: 'book',
-    targetId: 'book_8',
-    targetTitle: 'Crónica de una muerte anunciada',
-    reason: 'Precio engañoso o datos de edición dudosos',
-    details: 'El vendedor no especificó claramente el estado de conservación de la tapa trasera en la versión usada.',
-    status: 'pending',
-    createdAt: '2025-02-25T14:30:00Z',
-  },
-  {
-    id: 'rep_2',
-    reporterId: 'user_buyer_2',
-    reporterName: 'Carlos Benítez',
-    targetType: 'review',
-    targetId: 'rev_fake_99',
-    targetTitle: 'Reseña con lenguaje ofensivo',
-    reason: 'Lenguaje inapropiado o spam',
-    details: 'Un usuario publicó insultos en vez de una crítica literaria constructiva.',
-    status: 'pending',
-    createdAt: '2025-02-26T17:15:00Z',
   },
 ];

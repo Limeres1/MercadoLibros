@@ -45,4 +45,6 @@ export const BOOK_GENRES = [
   'Viajes',
 ] as const;
 
+export const BOOK_KEYWORD_LIMITS = { maxCount: 8, maxLength: 40 } as const;
+
 export const BOOK_LANGUAGES = ['Español', 'Inglés', 'Portugués', 'Francés', 'Italiano'] as const;

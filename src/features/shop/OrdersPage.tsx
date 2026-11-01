@@ -169,7 +169,11 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, isHighlighted, isSyncing, 
         {order.items.map(item => (
           <li key={item.bookId} className="flex items-center justify-between gap-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
-              <img src={item.coverUrl} alt="" className="h-14 w-10 shrink-0 rounded object-cover" />
+              {item.coverUrl ? (
+                <img src={item.coverUrl} alt="" className="h-14 w-10 shrink-0 rounded bg-slate-200 object-cover" />
+              ) : (
+                <span aria-hidden="true" className="h-14 w-10 shrink-0 rounded bg-slate-200" />
+              )}
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-slate-900">{item.title}</p>
                 <p className="truncate text-xs text-slate-500">

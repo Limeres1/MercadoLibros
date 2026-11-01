@@ -5,6 +5,9 @@ import { COLLECTIONS, USER_SUBCOLLECTIONS } from '../../src/constants/firestore.
 import { MAX_CART_QUANTITY, SHIPPING_COST } from '../../src/constants/statuses.js';
 import { paginateReaderText } from '../../src/lib/readerPagination.js';
 
+const linkedCover = (coverUrl: unknown) =>
+  typeof coverUrl === 'string' && !coverUrl.startsWith('data:') ? coverUrl : '';
+
 export class CheckoutError extends Error {}
 
 interface OrderItem {
@@ -77,7 +80,7 @@ export async function createOrderFromCart(
       author: book.author,
       price: book.price,
       quantity: entry.quantity,
-      coverUrl: book.coverUrl,
+      coverUrl: linkedCover(book.coverUrl),
       condition: book.condition,
     };
   });
@@ -171,7 +174,7 @@ export async function applyPaymentOutcome(
           orderId,
           title: item.title,
           author: item.author,
-          coverUrl: item.coverUrl,
+          coverUrl: book?.coverUrl ?? item.coverUrl,
           purchasedAt: paidAt,
           lastReadPage: 0,
           totalPages: Math.max(1, paginateReaderText(typeof text === 'string' ? text : '').length),

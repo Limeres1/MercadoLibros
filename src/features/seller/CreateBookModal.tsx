@@ -1,11 +1,37 @@
-import React, { useEffect, useState } from 'react';
-import { BookPlus, Check, Loader2, Plus, Save, Send, Sparkles, Tag, X } from 'lucide-react';
+import React, { useEffect, useId, useState } from 'react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  BookPlus,
+  CheckCircle2,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
+  Save,
+  Send,
+  Sparkles,
+  Upload,
+  X,
+} from 'lucide-react';
 
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { BOOK_GENRES, BOOK_LANGUAGES } from '@/constants/catalog';
 import { useBooks } from '@/features/catalog/BooksProvider';
-import { AIBookProposal, generateBookProposal } from '@/features/seller/aiBookProposal';
+import { AIBookProposal, generateBookProposal, mergeKeywords } from '@/features/seller/aiBookProposal';
+import { AIProposalPanel } from '@/features/seller/AIProposalPanel';
+import {
+  BOOK_FILE_LIMITS,
+  BookFileKind,
+  checkContentSize,
+  describeText,
+  MAX_SAMPLE_LENGTH,
+  prepareCover,
+  readBookText,
+  takeSample,
+  validateBookFile,
+} from '@/features/seller/bookFiles';
+import { KeywordsField } from '@/features/seller/KeywordsField';
 import { useSellerBooks } from '@/features/seller/useSellerBooks';
 import { Book, BookCondition } from '@/types';
 
@@ -19,13 +45,57 @@ const SAMPLE_COVERS = [
   'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80',
   'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=600&q=80',
   'https://images.unsplash.com/photo-1495640388908-05fa85288e61?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80',
 ];
+
+const INPUT_CLASS =
+  'w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500';
+const FILE_INPUT_CLASS =
+  'block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer';
+const LABEL_CLASS = 'text-xs font-semibold text-slate-700 block mb-1';
+
+const acceptFor = (kind: BookFileKind) => BOOK_FILE_LIMITS[kind].extensions.map(extension => `.${extension}`).join(',');
+
+interface FileStatus {
+  busy: boolean;
+  error: string | null;
+  info: string | null;
+}
+
+const IDLE: FileStatus = { busy: false, error: null, info: null };
+
+const FileFeedback: React.FC<{ status: FileStatus; id: string }> = ({ status, id }) => (
+  <div id={id} aria-live="polite" className="text-[11px]">
+    {status.busy && (
+      <p className="flex items-center gap-1 text-slate-500">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        Leyendo el archivo…
+      </p>
+    )}
+    {status.error && (
+      <p role="alert" className="flex items-start gap-1 font-medium text-rose-700">
+        <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        {status.error}
+      </p>
+    )}
+    {status.info && !status.error && !status.busy && (
+      <p className="flex items-center gap-1 font-medium text-emerald-700">
+        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        {status.info}
+      </p>
+    )}
+  </div>
+);
+
+const summarize = (text: string) => {
+  const { words, readerPages } = describeText(text);
+  return `${words.toLocaleString('es-AR')} palabras · ${readerPages} páginas en el lector`;
+};
 
 export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, onClose }) => {
   const { saveBook } = useSellerBooks();
   const { loadBookContent } = useBooks();
   const { showToast } = useToast();
+  const fieldId = useId();
 
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
@@ -35,158 +105,235 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
   const [condition, setCondition] = useState<BookCondition>('nuevo');
   const [genre, setGenre] = useState<string>('Ficción');
   const [language, setLanguage] = useState<string>('Español');
-  const [coverUrl, setCoverUrl] = useState('');
+  const [coverUrl, setCoverUrl] = useState(SAMPLE_COVERS[0]);
   const [pages, setPages] = useState('250');
-  const [publicationYear, setPublicationYear] = useState('2024');
+  const [publicationYear, setPublicationYear] = useState(String(new Date().getFullYear()));
   const [stock, setStock] = useState('10');
   const [sampleText, setSampleText] = useState('');
   const [fullContent, setFullContent] = useState('');
+  const [isContentLoading, setIsContentLoading] = useState(false);
+  const [isTextEditorOpen, setIsTextEditorOpen] = useState(false);
   const [keywords, setKeywords] = useState<string[]>([]);
-  const [customTagInput, setCustomTagInput] = useState('');
-
-  // Estados de IA (D4)
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiProposal, setAiProposal] = useState<AIBookProposal | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const [coverStatus, setCoverStatus] = useState<FileStatus>(IDLE);
+  const [bookFileStatus, setBookFileStatus] = useState<FileStatus>(IDLE);
+  const [sampleFileStatus, setSampleFileStatus] = useState<FileStatus>(IDLE);
+  const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (bookToEdit) {
-      setTitle(bookToEdit.title);
-      setAuthor(bookToEdit.author);
-      setIsbn(bookToEdit.isbn);
-      setDescription(bookToEdit.description);
-      setPrice(String(bookToEdit.price));
-      setCondition(bookToEdit.condition);
-      setGenre(bookToEdit.genre);
-      setLanguage(bookToEdit.language);
-      setCoverUrl(bookToEdit.coverUrl);
-      setPages(String(bookToEdit.pages));
-      setPublicationYear(String(bookToEdit.publicationYear));
-      setStock(String(bookToEdit.stock || 10));
-      setSampleText(bookToEdit.sampleText || '');
-      setKeywords(bookToEdit.keywords || []);
-      setFullContent('');
-      loadBookContent(bookToEdit.id).then(text => setFullContent(text ?? ''));
-    } else {
-      setTitle('');
-      setAuthor('');
-      setIsbn('');
-      setDescription('');
-      setPrice('15.00');
-      setCondition('nuevo');
-      setGenre('Ficción');
-      setLanguage('Español');
-      setCoverUrl(SAMPLE_COVERS[0]);
-      setPages('250');
-      setPublicationYear('2024');
-      setStock('10');
-      setSampleText('Fragmento del primer capítulo listo para lectura de muestra...');
-      setKeywords([]);
-      setFullContent('Capítulo 1\nEl texto completo de la obra disponible tras la compra.');
-    }
+    if (!bookToEdit) return;
+    setTitle(bookToEdit.title);
+    setAuthor(bookToEdit.author);
+    setIsbn(bookToEdit.isbn);
+    setDescription(bookToEdit.description);
+    setPrice(String(bookToEdit.price));
+    setCondition(bookToEdit.condition);
+    setGenre(bookToEdit.genre);
+    setLanguage(bookToEdit.language);
+    setCoverUrl(bookToEdit.coverUrl);
+    setPages(String(bookToEdit.pages));
+    setPublicationYear(String(bookToEdit.publicationYear));
+    setStock(String(bookToEdit.stock ?? 0));
+    setSampleText(bookToEdit.sampleText || '');
+    setKeywords(bookToEdit.keywords ?? []);
+    if (bookToEdit.condition !== 'digital') return;
+    setIsContentLoading(true);
+    loadBookContent(bookToEdit.id)
+      .then(text => {
+        setFullContent(text ?? '');
+        if (text) setBookFileStatus({ ...IDLE, info: `Texto guardado: ${summarize(text)}` });
+      })
+      .finally(() => setIsContentLoading(false));
   }, [bookToEdit, loadBookContent]);
 
-  // Manejo de Generación con IA (D4)
-  const handleGenerateWithAI = async () => {
-    if (!title.trim()) {
-      showToast('Por favor completá al menos el título de la obra para que la IA genere la propuesta.', 'error');
-      return;
-    }
+  const statusSetters = { cover: setCoverStatus, bookFile: setBookFileStatus, sampleFile: setSampleFileStatus };
 
-    setIsGeneratingAI(true);
+  const pickFile = (event: React.ChangeEvent<HTMLInputElement>, kind: BookFileKind) => {
+    const file = event.target.files?.[0];
+    if (!file) return null;
+    const error = validateBookFile(file, kind);
+    if (!error) return file;
+    event.target.value = '';
+    statusSetters[kind]({ ...IDLE, error });
+    return null;
+  };
+
+  const handleCoverChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = pickFile(event, 'cover');
+    if (!file) return;
+    setCoverStatus({ ...IDLE, busy: true });
     try {
-      const proposal = await generateBookProposal({
-        title: title.trim(),
-        author: author.trim(),
-        genre,
-        language,
-        sampleText: sampleText.trim() || (fullContent.trim() ? fullContent.slice(0, 500) : ''),
-      });
-      setAiProposal(proposal);
-      showToast('¡Propuesta generada! Podés revisarla y editarla antes de aplicarla.', 'info');
+      setCoverUrl(await prepareCover(file));
+      setCoverStatus({ ...IDLE, info: `Portada lista: ${file.name}` });
     } catch (error) {
-      // CA-2: Si la IA falla, el formulario sigue funcionando a mano
-      const message = error instanceof Error ? error.message : 'No se pudo conectar con la IA.';
-      showToast(message, 'error');
+      event.target.value = '';
+      setCoverStatus({ ...IDLE, error: (error as Error).message });
+    }
+  };
+
+  const handleBookFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = pickFile(event, 'bookFile');
+    if (!file) return;
+    setBookFileStatus({ ...IDLE, busy: true });
+    try {
+      const text = await readBookText(file);
+      const sizeError = checkContentSize(text);
+      if (sizeError) throw new Error(sizeError);
+      setFullContent(text);
+      setBookFileStatus({ ...IDLE, info: `${file.name}: ${summarize(text)}` });
+      if (!sampleText.trim()) {
+        setSampleText(takeSample(text, 3000));
+        setSampleFileStatus({ ...IDLE, info: 'Usamos el comienzo del libro como muestra. Podés cambiarla.' });
+      }
+    } catch (error) {
+      event.target.value = '';
+      setBookFileStatus({ ...IDLE, error: (error as Error).message });
+    }
+  };
+
+  const handleSampleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = pickFile(event, 'sampleFile');
+    if (!file) return;
+    setSampleFileStatus({ ...IDLE, busy: true });
+    try {
+      const text = await readBookText(file);
+      const sample = takeSample(text);
+      setSampleText(sample);
+      setSampleFileStatus({
+        ...IDLE,
+        info:
+          sample.length < text.length
+            ? `Muestra cargada de ${file.name}, recortada a ${MAX_SAMPLE_LENGTH.toLocaleString('es-AR')} caracteres.`
+            : `Muestra cargada de ${file.name}.`,
+      });
+    } catch (error) {
+      event.target.value = '';
+      setSampleFileStatus({ ...IDLE, error: (error as Error).message });
+    }
+  };
+
+  const handleGenerate = async () => {
+    setAiError(null);
+    setIsGenerating(true);
+    try {
+      setAiProposal(
+        await generateBookProposal({
+          title,
+          author,
+          genre,
+          language,
+          excerpt: sampleText.trim() || fullContent.trim(),
+        }),
+      );
+    } catch (error) {
+      setAiProposal(null);
+      setAiError(error instanceof Error ? error.message : 'La IA no está disponible en este momento.');
     } finally {
-      setIsGeneratingAI(false);
+      setIsGenerating(false);
     }
   };
 
-  // CA-1: Confirmación explícita para aplicar propuesta de IA
-  const handleApplyAIProposal = () => {
+  const applyProposal = () => {
     if (!aiProposal) return;
-    setDescription(aiProposal.description);
+    setDescription(aiProposal.description.trim());
     setGenre(aiProposal.genre);
-    if (aiProposal.keywords?.length) {
-      setKeywords(previous => [...new Set([...previous, ...aiProposal.keywords])]);
-    }
+    setKeywords(current => mergeKeywords(current, aiProposal.keywords));
     setAiProposal(null);
-    showToast('Propuesta aplicada al formulario. Podés seguir editándola antes de guardar.', 'success');
+    showToast('Propuesta aplicada. Podés seguir editando antes de guardar.', 'success');
   };
 
-  const handleDiscardAIProposal = () => {
-    setAiProposal(null);
-  };
-
-  const handleAddCustomTag = (event: React.FormEvent | React.KeyboardEvent) => {
-    event.preventDefault();
-    const tag = customTagInput.trim().toLowerCase().replace(/^#+/, '');
-    if (!tag) return;
-    if (!keywords.includes(tag)) {
-      setKeywords(previous => [...previous, tag]);
+  const validate = (submitForReview: boolean) => {
+    if (!title.trim() || !author.trim()) return 'Completá el título y el autor del libro.';
+    const numericPrice = Number(price);
+    if (!Number.isFinite(numericPrice) || numericPrice <= 0) return 'Ingresá un precio mayor a 0.';
+    if (condition !== 'digital' && (!Number.isInteger(Number(stock)) || Number(stock) < 0))
+      return 'El stock tiene que ser un número entero, 0 o más.';
+    if (condition === 'digital') {
+      if (submitForReview && !fullContent.trim())
+        return 'Subí el archivo del libro (EPUB o TXT) antes de enviarlo a revisión: es lo que leen los compradores.';
+      return checkContentSize(fullContent);
     }
-    setCustomTagInput('');
+    return null;
   };
 
-  const handleRemoveTag = (tagToRemove: string) => {
-    setKeywords(previous => previous.filter(t => t !== tagToRemove));
-  };
+  const isBusy = isSubmitting || coverStatus.busy || bookFileStatus.busy || sampleFileStatus.busy || isContentLoading;
 
   const handleSubmit = async (submitForReview: boolean) => {
-    if (!title.trim() || !author.trim() || !price) {
-      showToast('Por favor completa el título, autor y precio del libro.', 'error');
-      return;
-    }
-
+    const error = validate(submitForReview);
+    setFormError(error);
+    if (error) return;
     setIsSubmitting(true);
-    await saveBook(
-      {
-        id: bookToEdit?.id,
-        title: title.trim(),
-        author: author.trim(),
-        isbn: isbn.trim(),
-        description: description.trim(),
-        price: parseFloat(price) || 10,
-        condition,
-        genre,
-        language,
-        coverUrl: coverUrl || SAMPLE_COVERS[0],
-        pages: parseInt(pages) || 200,
-        publicationYear: parseInt(publicationYear) || 2024,
-        stock: parseInt(stock) || 10,
-        sampleText: sampleText.trim(),
-        keywords: keywords.length > 0 ? keywords : undefined,
-      },
-      submitForReview,
-      fullContent.trim(),
-    );
-    setIsSubmitting(false);
-    onClose();
+    try {
+      const saved = await saveBook(
+        {
+          id: bookToEdit?.id,
+          title: title.trim(),
+          author: author.trim(),
+          isbn: isbn.trim(),
+          description: description.trim(),
+          price: Number(price),
+          condition,
+          genre,
+          language,
+          coverUrl,
+          pages: Math.round(Number(pages)) || 200,
+          publicationYear: Math.round(Number(publicationYear)) || new Date().getFullYear(),
+          ...(condition === 'digital' ? {} : { stock: Number(stock) }),
+          sampleText: sampleText.trim(),
+          keywords,
+        },
+        submitForReview,
+        condition === 'digital' ? fullContent.trim() : undefined,
+      );
+      if (saved) onClose();
+    } catch (caught) {
+      showToast(caught instanceof Error ? caught.message : 'No pudimos guardar el libro.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  const ids = Object.fromEntries(
+    [
+      'title',
+      'author',
+      'isbn',
+      'price',
+      'condition',
+      'genre',
+      'language',
+      'amount',
+      'year',
+      'cover',
+      'coverHelp',
+      'bookFile',
+      'bookFileHelp',
+      'sampleFile',
+      'sampleFileHelp',
+      'description',
+      'aiStatus',
+      'keywords',
+      'sample',
+      'content',
+    ].map(name => [name, `${fieldId}-${name}`]),
+  );
 
   return (
     <Modal onClose={onClose} labelledBy="book-form-title" className="max-w-3xl bg-white rounded-3xl border-slate-200">
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/80">
         <div className="flex items-center gap-2.5">
           <div className="p-2 bg-emerald-100 text-emerald-800 rounded-xl">
-            <BookPlus className="w-5 h-5" />
+            <BookPlus className="w-5 h-5" aria-hidden="true" />
           </div>
           <div>
             <h3 id="book-form-title" className="font-bold text-slate-900 text-base">
-              {bookToEdit ? 'Editar Libro' : 'Publicar Nuevo Libro'}
+              {bookToEdit ? 'Editar libro' : 'Publicar nuevo libro'}
             </h3>
-            <p className="text-xs text-slate-500">Carga de ficha, sinopsis inteligente, portada y muestra</p>
+            <p className="text-xs text-slate-500">Ficha, portada, archivo del libro y muestra gratuita</p>
           </div>
         </div>
         <button
@@ -198,351 +345,389 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {bookToEdit?.status === 'published' && (
+          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-xs text-amber-900">
+              Este libro está publicado. Si guardás cambios, vuelve a <strong>En revisión</strong> y un administrador
+              tiene que aprobarlo otra vez antes de que reaparezca en el catálogo.
+            </p>
+          </div>
+        )}
+
+        {bookToEdit?.status === 'rejected' && bookToEdit.rejectionReason && (
+          <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-700 shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="text-xs text-rose-900 space-y-0.5">
+              <p className="font-bold">Motivo del rechazo</p>
+              <p className="text-rose-800">{bookToEdit.rejectionReason}</p>
+              <p className="text-[11px] text-rose-600 mt-1">Corregí lo indicado antes de volver a enviarlo.</p>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Título de la Obra *</label>
+            <label htmlFor={ids.title} className={LABEL_CLASS}>
+              Título *
+            </label>
             <input
-              type="text"
+              id={ids.title}
               required
+              maxLength={200}
               value={title}
               onChange={event => setTitle(event.target.value)}
-              placeholder="Ej: Rayuela"
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 font-medium"
+              placeholder="Ej.: Rayuela"
+              className={`${INPUT_CLASS} font-medium`}
             />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Autor / Escritor *</label>
+            <label htmlFor={ids.author} className={LABEL_CLASS}>
+              Autor *
+            </label>
             <input
-              type="text"
+              id={ids.author}
               required
+              maxLength={120}
               value={author}
               onChange={event => setAuthor(event.target.value)}
-              placeholder="Ej: Julio Cortázar"
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 font-medium"
+              placeholder="Ej.: Julio Cortázar"
+              className={`${INPUT_CLASS} font-medium`}
             />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Código ISBN</label>
+            <label htmlFor={ids.isbn} className={LABEL_CLASS}>
+              ISBN
+            </label>
             <input
-              type="text"
+              id={ids.isbn}
+              maxLength={20}
               value={isbn}
               onChange={event => setIsbn(event.target.value)}
-              placeholder="978-..."
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 font-mono"
+              placeholder="978-…"
+              className={`${INPUT_CLASS} font-mono`}
             />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Precio de Venta (USD) *</label>
+            <label htmlFor={ids.price} className={LABEL_CLASS}>
+              Precio (USD) *
+            </label>
             <input
+              id={ids.price}
               type="number"
-              step="0.10"
-              min="1"
+              step="0.01"
+              min="0.01"
               required
               value={price}
               onChange={event => setPrice(event.target.value)}
-              placeholder="15.00"
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 font-bold"
+              className={`${INPUT_CLASS} font-bold`}
             />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Formato / Condición</label>
+            <label htmlFor={ids.condition} className={LABEL_CLASS}>
+              Formato
+            </label>
             <select
+              id={ids.condition}
               value={condition}
               onChange={event => setCondition(event.target.value as BookCondition)}
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500"
+              className={INPUT_CLASS}
             >
-              <option value="nuevo">Nuevo</option>
-              <option value="usado">Usado</option>
-              <option value="digital">Digital (eBook)</option>
+              <option value="nuevo">Nuevo (físico, con envío)</option>
+              <option value="usado">Usado (físico, con envío)</option>
+              <option value="digital">Digital (se lee en la web)</option>
             </select>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Género</label>
+            <label htmlFor={ids.genre} className={LABEL_CLASS}>
+              Género
+            </label>
             <select
+              id={ids.genre}
               value={genre}
               onChange={event => setGenre(event.target.value)}
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500"
+              className={INPUT_CLASS}
             >
-              {BOOK_GENRES.map(g => (
-                <option key={g} value={g}>
-                  {g}
+              {[...new Set<string>([...BOOK_GENRES, genre])].map(option => (
+                <option key={option} value={option}>
+                  {option}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Idioma</label>
+            <label htmlFor={ids.language} className={LABEL_CLASS}>
+              Idioma
+            </label>
             <select
+              id={ids.language}
               value={language}
               onChange={event => setLanguage(event.target.value)}
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500"
+              className={INPUT_CLASS}
             >
-              {BOOK_LANGUAGES.map(lang => (
-                <option key={lang} value={lang}>
-                  {lang}
+              {[...new Set<string>([...BOOK_LANGUAGES, language])].map(option => (
+                <option key={option} value={option}>
+                  {option}
                 </option>
               ))}
             </select>
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Cantidad en Stock / Ejemplares</label>
-            <input
-              type="number"
-              min="1"
-              value={stock}
-              onChange={event => setStock(event.target.value)}
-              className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor={ids.amount} className={LABEL_CLASS}>
+                {condition === 'digital' ? 'Páginas' : 'Stock'}
+              </label>
+              <input
+                id={ids.amount}
+                type="number"
+                min={condition === 'digital' ? 1 : 0}
+                step="1"
+                value={condition === 'digital' ? pages : stock}
+                onChange={event => (condition === 'digital' ? setPages : setStock)(event.target.value)}
+                className={INPUT_CLASS}
+              />
+            </div>
+            <div>
+              <label htmlFor={ids.year} className={LABEL_CLASS}>
+                Año
+              </label>
+              <input
+                id={ids.year}
+                type="number"
+                min="0"
+                max="2100"
+                value={publicationYear}
+                onChange={event => setPublicationYear(event.target.value)}
+                className={INPUT_CLASS}
+              />
+            </div>
           </div>
         </div>
 
-        <div>
-          <label className="text-xs font-semibold text-slate-700 block mb-1">Portada del Libro (URL de Imagen)</label>
-          <div className="flex gap-2">
-            <input
-              type="url"
-              value={coverUrl}
-              onChange={event => setCoverUrl(event.target.value)}
-              placeholder="https://images.unsplash.com/..."
-              className="flex-1 p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500"
-            />
+        <div className="space-y-4 pt-2 border-t border-slate-100">
+          <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+            <Upload className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+            Archivos
+          </h4>
+
+          <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label htmlFor={ids.cover} className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                <ImageIcon className="w-4 h-4 text-emerald-600" aria-hidden="true" />
+                Portada
+              </label>
+              <span className="text-[11px] text-slate-500">
+                {BOOK_FILE_LIMITS.cover.label}, hasta {BOOK_FILE_LIMITS.cover.size}
+              </span>
+            </div>
+            <div className="flex flex-wrap sm:flex-nowrap gap-4 items-start">
+              <div className="w-20 h-28 rounded-xl border border-slate-200 overflow-hidden shrink-0 bg-slate-200">
+                {coverUrl && (
+                  <img src={coverUrl} alt="Vista previa de la portada" className="w-full h-full object-cover" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0 space-y-2">
+                <input
+                  id={ids.cover}
+                  type="file"
+                  accept={acceptFor('cover')}
+                  aria-describedby={ids.coverHelp}
+                  onChange={handleCoverChange}
+                  className={FILE_INPUT_CLASS}
+                />
+                <FileFeedback status={coverStatus} id={ids.coverHelp} />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-slate-500">O elegí una genérica:</span>
+                  {SAMPLE_COVERS.map((cover, index) => (
+                    <button
+                      type="button"
+                      key={cover}
+                      aria-label={`Usar portada genérica ${index + 1}`}
+                      aria-pressed={coverUrl === cover}
+                      onClick={() => {
+                        setCoverUrl(cover);
+                        setCoverStatus(IDLE);
+                      }}
+                      className="w-6 h-8 rounded border border-slate-200 overflow-hidden hover:ring-2 hover:ring-emerald-500 aria-pressed:ring-2 aria-pressed:ring-emerald-600"
+                    >
+                      <img src={cover} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-[10px] text-slate-400">Portadas de muestra:</span>
-            {SAMPLE_COVERS.map((cover, index) => (
+
+          {condition === 'digital' && (
+            <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label
+                  htmlFor={ids.bookFile}
+                  className="text-xs font-semibold text-slate-800 flex items-center gap-1.5"
+                >
+                  <FileText className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                  Archivo del libro *
+                </label>
+                <span className="text-[11px] text-slate-500">
+                  {BOOK_FILE_LIMITS.bookFile.label}, hasta {BOOK_FILE_LIMITS.bookFile.size}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Es el texto que leen los compradores en el lector. Sólo lo ven quienes lo compraron.
+              </p>
+              <input
+                id={ids.bookFile}
+                type="file"
+                accept={acceptFor('bookFile')}
+                aria-describedby={ids.bookFileHelp}
+                onChange={handleBookFileChange}
+                className={FILE_INPUT_CLASS}
+              />
+              {isContentLoading ? (
+                <p className="text-[11px] text-slate-500">Cargando el texto guardado…</p>
+              ) : (
+                <FileFeedback status={bookFileStatus} id={ids.bookFileHelp} />
+              )}
               <button
                 type="button"
-                key={index}
-                onClick={() => setCoverUrl(cover)}
-                className="w-6 h-8 rounded border border-slate-200 overflow-hidden hover:ring-2 hover:ring-emerald-500"
+                onClick={() => setIsTextEditorOpen(open => !open)}
+                aria-expanded={isTextEditorOpen}
+                aria-controls={ids.content}
+                className="text-[11px] font-semibold text-indigo-700 hover:underline"
               >
-                <img src={cover} alt="cover preview" className="w-full h-full object-cover" />
+                {isTextEditorOpen ? 'Ocultar el texto' : 'Ver o pegar el texto a mano'}
               </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Sección de Sinopsis y Generación con IA (D4) */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-slate-700">Sinopsis / Descripción</label>
-            <button
-              type="button"
-              disabled={isGeneratingAI}
-              onClick={handleGenerateWithAI}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-102"
-              title={
-                !title.trim()
-                  ? 'Escribí el título primero para sugerir con IA'
-                  : 'Generar sinopsis, género y etiquetas con IA'
-              }
-            >
-              {isGeneratingAI ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Generando propuesta...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Generar con IA</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Tarjeta de propuesta de IA con edición previa a la confirmación (CA-1) */}
-          {aiProposal && (
-            <div className="p-4 bg-purple-50/90 border border-purple-200 rounded-2xl space-y-3 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-purple-200 text-purple-800 rounded-lg">
-                    <Sparkles className="w-4 h-4 text-purple-700" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-purple-950">Propuesta generada por Gemini</h4>
-                    <p className="text-[10px] text-purple-700">
-                      Revisá y editá la propuesta antes de aplicarla al formulario.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleDiscardAIProposal}
-                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-purple-100 transition-colors"
-                  title="Descartar propuesta"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div>
-                  <span className="font-semibold text-purple-900 block mb-1">Género sugerido:</span>
-                  <select
-                    value={aiProposal.genre}
-                    onChange={e => setAiProposal({ ...aiProposal, genre: e.target.value })}
-                    className="w-full p-2 bg-white border border-purple-200 rounded-xl text-xs outline-none focus:border-purple-500 font-medium"
-                  >
-                    {BOOK_GENRES.map(g => (
-                      <option key={g} value={g}>
-                        {g}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <span className="font-semibold text-purple-900 block mb-1">Palabras clave / Etiquetas:</span>
-                  <div className="flex flex-wrap gap-1.5 p-1.5 bg-white border border-purple-200 rounded-xl min-h-[38px] items-center">
-                    {aiProposal.keywords.map((kw, i) => (
-                      <span
-                        key={i}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-800 rounded-md text-[10px] font-semibold"
-                      >
-                        #{kw}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <span className="font-semibold text-purple-900 block mb-1">
-                  Sinopsis sugerida (podés editarla aquí):
-                </span>
+              {isTextEditorOpen && (
                 <textarea
-                  rows={3}
-                  value={aiProposal.description}
-                  onChange={e => setAiProposal({ ...aiProposal, description: e.target.value })}
-                  className="w-full p-2.5 bg-white border border-purple-200 rounded-xl text-xs outline-none focus:border-purple-500 font-sans resize-none"
+                  id={ids.content}
+                  aria-label="Texto completo del libro"
+                  rows={8}
+                  value={fullContent}
+                  onChange={event => setFullContent(event.target.value)}
+                  placeholder="Separá los párrafos con una línea en blanco."
+                  className={`${INPUT_CLASS} font-serif`}
                 />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleDiscardAIProposal}
-                  className="px-3 py-1.5 text-slate-600 hover:bg-purple-100 rounded-xl text-xs font-medium transition-colors"
-                >
-                  Descartar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleApplyAIProposal}
-                  className="px-4 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Aplicar al Formulario</span>
-                </button>
-              </div>
+              )}
             </div>
           )}
 
-          {/* Campo de descripción editable a mano (CA-2) */}
-          <textarea
-            rows={3}
-            value={description}
-            onChange={event => setDescription(event.target.value)}
-            placeholder="Escribe la reseña descriptiva del libro (o usa el botón 'Generar con IA')..."
-            className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 resize-none"
-          />
+          <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label
+                htmlFor={ids.sampleFile}
+                className="text-xs font-semibold text-slate-800 flex items-center gap-1.5"
+              >
+                <FileText className="w-4 h-4 text-amber-600" aria-hidden="true" />
+                Muestra gratuita
+              </label>
+              <span className="text-[11px] text-slate-500">
+                {BOOK_FILE_LIMITS.sampleFile.label}, hasta {BOOK_FILE_LIMITS.sampleFile.size}
+              </span>
+            </div>
+            <input
+              id={ids.sampleFile}
+              type="file"
+              accept={acceptFor('sampleFile')}
+              aria-describedby={ids.sampleFileHelp}
+              onChange={handleSampleFileChange}
+              className={FILE_INPUT_CLASS}
+            />
+            <FileFeedback status={sampleFileStatus} id={ids.sampleFileHelp} />
+            <textarea
+              id={ids.sample}
+              aria-label="Texto de la muestra gratuita"
+              rows={4}
+              maxLength={MAX_SAMPLE_LENGTH}
+              value={sampleText}
+              onChange={event => setSampleText(event.target.value)}
+              placeholder="Fragmento que cualquiera puede leer antes de comprar. Podés subir un archivo o escribirlo acá."
+              className={`${INPUT_CLASS} font-serif`}
+            />
+          </div>
         </div>
 
-        {/* Sección de Palabras clave / Etiquetas (Tags) */}
-        <div>
-          <label className="text-xs font-semibold text-slate-700 block mb-1">Palabras clave y Etiquetas</label>
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {keywords.map(tag => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-medium border border-slate-200"
-              >
-                <Tag className="w-3 h-3 text-slate-500" />
-                <span>{tag}</span>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveTag(tag)}
-                  className="text-slate-400 hover:text-slate-600 ml-0.5"
-                  title="Eliminar etiqueta"
-                >
-                  &times;
-                </button>
-              </span>
-            ))}
-            {keywords.length === 0 && (
-              <span className="text-[11px] text-slate-400 italic">No hay etiquetas asignadas aún.</span>
-            )}
-          </div>
-
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={customTagInput}
-              onChange={event => setCustomTagInput(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter') {
-                  handleAddCustomTag(event);
-                }
-              }}
-              placeholder="Añadir etiqueta (ej: misterio, bestseller)..."
-              className="flex-1 p-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500"
-            />
+        <div className="space-y-3 pt-2 border-t border-slate-100">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label htmlFor={ids.description} className="text-xs font-semibold text-slate-700">
+              Sinopsis
+            </label>
             <button
               type="button"
-              onClick={handleAddCustomTag}
-              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+              onClick={handleGenerate}
+              disabled={isGenerating || !title.trim()}
+              aria-describedby={ids.aiStatus}
+              className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-800 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Añadir</span>
+              {isGenerating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {isGenerating ? 'Generando…' : aiProposal ? 'Generar otra' : 'Generar con IA'}
             </button>
+          </div>
+          <div id={ids.aiStatus} aria-live="polite" className="text-[11px]">
+            {aiError ? (
+              <p role="alert" className="flex items-start gap-1 font-medium text-rose-700">
+                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                {aiError} Podés completar la ficha a mano.
+              </p>
+            ) : (
+              !title.trim() && (
+                <p className="text-slate-500">
+                  Escribí el título y la IA te propone sinopsis, género y palabras clave.
+                </p>
+              )
+            )}
+          </div>
+          {aiProposal && (
+            <AIProposalPanel
+              proposal={aiProposal}
+              replacesDescription={Boolean(description.trim())}
+              onChange={setAiProposal}
+              onApply={applyProposal}
+              onDiscard={() => setAiProposal(null)}
+            />
+          )}
+          <textarea
+            id={ids.description}
+            rows={4}
+            maxLength={5000}
+            value={description}
+            onChange={event => setDescription(event.target.value)}
+            placeholder="De qué trata el libro, en pocas líneas."
+            className={`${INPUT_CLASS} resize-y`}
+          />
+          <div>
+            <label htmlFor={ids.keywords} className={LABEL_CLASS}>
+              Palabras clave
+            </label>
+            <p className="mb-2 text-[11px] text-slate-500">
+              Ayudan a encontrar el libro en el buscador. Separalas con coma o Enter.
+            </p>
+            <KeywordsField id={ids.keywords} keywords={keywords} onChange={setKeywords} inputClassName={INPUT_CLASS} />
           </div>
         </div>
 
-        <div>
-          <label className="text-xs font-semibold text-slate-700 block mb-1 flex items-center justify-between">
-            <span>Fragmento de Muestra Gratuita</span>
-            <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-normal">
-              Disponible para visitantes antes de comprar
-            </span>
-          </label>
-          <textarea
-            rows={3}
-            value={sampleText}
-            onChange={event => setSampleText(event.target.value)}
-            placeholder="Fragmento inicial que los usuarios pueden leer gratuitamente..."
-            className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 font-serif"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-semibold text-slate-700 block mb-1 flex items-center justify-between">
-            <span>Contenido Completo del Libro</span>
-            <span className="text-[10px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded font-normal">
-              Para el lector digital in-app tras la compra
-            </span>
-          </label>
-          <textarea
-            rows={4}
-            value={fullContent}
-            onChange={event => setFullContent(event.target.value)}
-            placeholder="Capítulo 1...\nTexto completo o capítulos de la obra..."
-            className="w-full p-2.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-emerald-500 font-serif"
-          />
-        </div>
+        {formError && (
+          <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800">
+            {formError}
+          </p>
+        )}
       </div>
 
       <div className="p-4 border-t border-slate-100 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
+          disabled={isSubmitting}
           onClick={onClose}
           className="px-4 py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl text-xs font-medium transition-colors"
         >
@@ -550,24 +735,24 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
         </button>
 
         <div className="flex items-center gap-2">
+          {isSubmitting && <Loader2 className="w-4 h-4 animate-spin text-emerald-600" aria-label="Guardando" />}
           <button
             type="button"
-            disabled={isSubmitting}
+            disabled={isBusy}
             onClick={() => handleSubmit(false)}
-            className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs"
+            className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50"
           >
-            <Save className="w-4 h-4 text-slate-600" />
-            <span>Guardar Borrador</span>
+            <Save className="w-4 h-4 text-slate-600" aria-hidden="true" />
+            Guardar borrador
           </button>
-
           <button
             type="button"
-            disabled={isSubmitting}
+            disabled={isBusy}
             onClick={() => handleSubmit(true)}
-            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/25 transition-all"
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/25 transition-all disabled:opacity-50"
           >
-            <Send className="w-4 h-4" />
-            <span>Enviar a Revisión</span>
+            <Send className="w-4 h-4" aria-hidden="true" />
+            Enviar a revisión
           </button>
         </div>
       </div>

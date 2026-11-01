@@ -8,6 +8,7 @@ export const ROUTES = {
   reader: '/leer/:bookId',
   orders: '/pedidos',
   profile: '/perfil',
+  userProfile: '/usuario/:userId',
   seller: '/vendedor',
   admin: '/admin',
   paymentSimulation: '/pago/simulado',
@@ -38,6 +39,7 @@ export const paths = {
     return query ? `${ROUTES.home}?${query}` : ROUTES.home;
   },
   book: (bookId: string) => generatePath(ROUTES.book, { bookId }),
+  userProfile: (userId: string) => generatePath(ROUTES.userProfile, { userId }),
   reader: (bookId: string) => generatePath(ROUTES.reader, { bookId }),
   order: (orderId: string) => `${ROUTES.orders}?${new URLSearchParams({ [ORDER_PARAM]: orderId })}`,
 };

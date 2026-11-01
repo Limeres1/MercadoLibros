@@ -12,9 +12,9 @@ export const isbnToken = (text: string) => {
   return /^\d{9}[\dx](\d{3})?$/.test(digits) ? digits : null;
 };
 
-export function buildSearchTokens(book: { title: string; author: string; isbn?: string }) {
+export function buildSearchTokens(book: { title: string; author: string; isbn?: string; keywords?: string[] }) {
   const tokens = new Set<string>();
-  for (const word of tokenizeQuery(`${book.title} ${book.author}`)) {
+  for (const word of tokenizeQuery([book.title, book.author, ...(book.keywords ?? [])].join(' '))) {
     for (let length = MIN_TOKEN_LENGTH; length <= word.length; length++) tokens.add(word.slice(0, length));
   }
   const isbn = isbnToken(book.isbn ?? '');

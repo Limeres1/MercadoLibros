@@ -27,7 +27,7 @@ import { useBook } from '@/features/catalog/BooksProvider';
 import { isOutOfStock } from '@/features/catalog/catalogFilters';
 import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
 import { ReportModal } from '@/features/catalog/reports/ReportModal';
-import { ReportTarget } from '@/features/catalog/reports/ReportsProvider';
+import { ReportTarget, useReports } from '@/features/catalog/reports/ReportsProvider';
 import { BookReviews } from '@/features/catalog/reviews/BookReviews';
 import { SampleReaderModal } from '@/features/catalog/SampleReaderModal';
 import { useLibrary } from '@/features/reader/LibraryProvider';
@@ -90,6 +90,8 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
   const maxQuantity = getMaxQuantity(book);
   const statusNotice = STATUS_NOTICES[book.status];
 
+  const { hasReported } = useReports();
+
   const openReport = (target: ReportTarget) => {
     if (requireLogin('Iniciá sesión para denunciar contenido.')) setReportTarget(target);
   };
@@ -116,7 +118,14 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
     { label: 'Páginas', value: String(book.pages) },
     { label: 'Año de publicación', value: String(book.publicationYear) },
     { label: 'ISBN', value: book.isbn || 'Sin ISBN' },
-    { label: 'Vendedor', value: book.sellerName },
+    {
+      label: 'Vendedor',
+      value: (
+        <Link to={paths.userProfile(book.sellerId)} className="text-amber-700 hover:underline">
+          {book.sellerName}
+        </Link>
+      ),
+    },
   ];
 
   return (
@@ -297,6 +306,20 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
             <p className="mt-2 max-w-prose whitespace-pre-line font-serif text-[15px] leading-7 text-slate-700">
               {book.description || 'El vendedor todavía no cargó una sinopsis.'}
             </p>
+            {book.keywords && book.keywords.length > 0 && (
+              <ul aria-label="Palabras clave" className="mt-3 flex flex-wrap gap-1.5">
+                {book.keywords.map(keyword => (
+                  <li key={keyword}>
+                    <Link
+                      to={paths.catalog({ [CATALOG_PARAMS.search]: keyword })}
+                      className="inline-block rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs text-slate-600 hover:border-amber-400 hover:text-amber-800"
+                    >
+                      {keyword}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           <section aria-labelledby="detalles">
@@ -316,14 +339,21 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
             </dl>
           </section>
 
-          <button
-            type="button"
-            onClick={() => openReport({ type: 'book', id: book.id, title: book.title })}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-700"
-          >
-            <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
-            Denunciar esta publicación
-          </button>
+          {hasReported({ type: 'book', id: book.id }) ? (
+            <p className="flex items-center gap-1.5 text-xs text-slate-500">
+              <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+              Ya denunciaste esta publicación. La revisa la administración.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => openReport({ type: 'book', id: book.id, title: book.title })}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-700"
+            >
+              <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+              Denunciar esta publicación
+            </button>
+          )}
         </div>
       </article>
 

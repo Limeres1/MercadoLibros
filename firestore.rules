@@ -120,6 +120,11 @@ service cloud.firestore {
       }
     }
 
+    function isValidCover(value) {
+      return isText(value, 0, 1000)
+        || (isText(value, 0, 150000) && value.matches('data:image/(jpeg|webp);base64,[A-Za-z0-9+/=]+'));
+    }
+
     function isValidBook(data) {
       return isText(data.title, 1, 200)
         && isText(data.author, 1, 120)
@@ -129,12 +134,13 @@ service cloud.firestore {
         && data.condition in ['digital', 'nuevo', 'usado']
         && isText(data.genre, 1, 60)
         && isText(data.language, 1, 40)
-        && isText(data.coverUrl, 0, 1000)
+        && isValidCover(data.coverUrl)
         && isText(data.sampleText, 0, 20000)
         && isText(data.sellerName, 1, 120)
         && data.pages is int && data.pages >= 0 && data.pages <= 10000
         && data.publicationYear is int && data.publicationYear >= 0 && data.publicationYear <= 2100
-        && (!('stock' in data) || (data.stock is int && data.stock >= 0));
+        && (!('stock' in data) || (data.stock is int && data.stock >= 0))
+        && (!('keywords' in data) || (data.keywords is list && data.keywords.size() <= 8));
     }
 
     function hasReviewed(bookId) {

@@ -1,118 +1,78 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  AI_PROPOSAL_ERRORS,
   AI_SELLER_SYSTEM_INSTRUCTION,
   buildSellerBookPrompt,
   generateBookProposal,
+  mergeKeywords,
   parseAIBookProposal,
 } from '@/features/seller/aiBookProposal';
 import { askAI } from '@/services/ai';
 
-vi.mock('@/services/ai', () => ({
-  askAI: vi.fn(),
-  AIError: class extends Error {},
-}));
+vi.mock('@/services/ai', () => ({ askAI: vi.fn(), AIError: class extends Error {} }));
 
-describe('aiBookProposal (D4)', () => {
-  describe('buildSellerBookPrompt', () => {
-    it('builds a prompt including title, author, genre, language, and sampleText', () => {
-      const prompt = buildSellerBookPrompt({
-        title: 'El Aleph',
-        author: 'Jorge Luis Borges',
-        genre: 'Cuentos',
-        language: 'Español',
-        sampleText: 'La candente mañana de febrero en que Beatriz Viterbo murió...',
-      });
+describe('aiBookProposal', () => {
+  beforeEach(() => vi.clearAllMocks());
 
-      expect(prompt).toContain('El Aleph');
-      expect(prompt).toContain('Jorge Luis Borges');
-      expect(prompt).toContain('Cuentos');
-      expect(prompt).toContain('Español');
-      expect(prompt).toContain('Beatriz Viterbo');
+  it('builds the prompt from the filled fields and a bounded excerpt', () => {
+    const prompt = buildSellerBookPrompt({
+      title: ' El Aleph ',
+      author: 'Borges',
+      language: 'Español',
+      excerpt: `La candente mañana de febrero${'.'.repeat(5000)}`,
     });
+    expect(prompt).toContain('Título: El Aleph');
+    expect(prompt).toContain('Autor: Borges');
+    expect(prompt).toContain('La candente mañana de febrero');
+    expect(prompt).not.toContain('Género elegido');
+    expect(prompt.length).toBeLessThan(3200);
+  });
 
-    it('works with only title provided', () => {
-      const prompt = buildSellerBookPrompt({ title: 'Rayuela' });
-      expect(prompt).toContain('Rayuela');
-      expect(prompt).not.toContain('Autor:');
+  it('keeps the system instruction inside the server limit', () => {
+    expect(AI_SELLER_SYSTEM_INSTRUCTION.length).toBeLessThanOrEqual(2000);
+  });
+
+  it('parses the proposal, even inside a markdown block', () => {
+    const raw =
+      '```json\n{"description":" Laberintos. ","genre":"cuentos","keywords":["#Borges","  Buenos   Aires ","borges",3]}\n```';
+    expect(parseAIBookProposal(raw, 'Ficción')).toEqual({
+      description: 'Laberintos.',
+      genre: 'Cuentos',
+      keywords: ['borges', 'buenos aires'],
     });
   });
 
-  describe('parseAIBookProposal', () => {
-    it('parses clean JSON into description, genre, and keywords', () => {
-      const raw = JSON.stringify({
-        description: 'Una fascinante obra de la literatura universal.',
-        genre: 'Realismo Mágico',
-        keywords: ['macondo', 'familia buendia', 'colombia'],
-      });
-
-      const result = parseAIBookProposal(raw);
-      expect(result.description).toBe('Una fascinante obra de la literatura universal.');
-      expect(result.genre).toBe('Realismo Mágico');
-      expect(result.keywords).toEqual(['macondo', 'familia buendia', 'colombia']);
-    });
-
-    it('handles markdown code block wrappers (```json ... ```)', () => {
-      const raw = `\`\`\`json
-{
-  "description": "Laberintos y espejos en Buenos Aires.",
-  "genre": "Ficción",
-  "keywords": ["borges", "filosofia"]
-}
-\`\`\``;
-
-      const result = parseAIBookProposal(raw);
-      expect(result.description).toBe('Laberintos y espejos en Buenos Aires.');
-      expect(result.genre).toBe('Ficción');
-      expect(result.keywords).toEqual(['borges', 'filosofia']);
-    });
-
-    it('falls back to standard genre if proposed genre is not in list', () => {
-      const raw = JSON.stringify({
-        description: 'Un libro sobre viajes espaciales.',
-        genre: 'Genero Inexistente 123',
-        keywords: ['espacio'],
-      });
-
-      const result = parseAIBookProposal(raw, 'Ciencia ficción');
-      expect(result.genre).toBe('Ciencia ficción');
-    });
-
-    it('throws AIError if JSON is completely invalid', () => {
-      expect(() => parseAIBookProposal('Respuesta en texto no json')).toThrow();
-    });
+  it('keeps the seller genre when the AI invents one', () => {
+    const raw = JSON.stringify({ description: 'Viajes espaciales.', genre: 'Space opera', keywords: [] });
+    expect(parseAIBookProposal(raw, 'Ciencia ficción').genre).toBe('Ciencia ficción');
   });
 
-  describe('generateBookProposal', () => {
-    it('throws error if title is empty', async () => {
-      await expect(generateBookProposal({ title: '   ' })).rejects.toThrow(
-        'Por favor indicá al menos el título de la obra',
-      );
+  it('CA-2: rejects answers without a usable synopsis instead of inventing one', () => {
+    expect(() => parseAIBookProposal('no es json', 'Ficción')).toThrow(AI_PROPOSAL_ERRORS.invalidResponse);
+    expect(() => parseAIBookProposal('{"description":"  "}', 'Ficción')).toThrow(AI_PROPOSAL_ERRORS.invalidResponse);
+  });
+
+  it('limits the merged keywords', () => {
+    const added = Array.from({ length: 12 }, (_slot, index) => `tema ${index}`);
+    expect(mergeKeywords(['tema 0'], added)).toHaveLength(8);
+    expect(mergeKeywords([], ['x'.repeat(60)])[0]).toHaveLength(40);
+  });
+
+  it('asks for JSON and does not call the AI without a title', async () => {
+    await expect(generateBookProposal({ title: '  ' })).rejects.toThrow(AI_PROPOSAL_ERRORS.missingTitle);
+    expect(askAI).not.toHaveBeenCalled();
+
+    vi.mocked(askAI).mockResolvedValueOnce('{"description":"Sinopsis","genre":"Novela","keywords":["amor"]}');
+    await expect(generateBookProposal({ title: 'Rayuela', genre: 'Ficción' })).resolves.toEqual({
+      description: 'Sinopsis',
+      genre: 'Novela',
+      keywords: ['amor'],
     });
-
-    it('calls askAI with prompt, system instruction, and json=true', async () => {
-      const mockResponse = JSON.stringify({
-        description: 'Sinopsis de prueba',
-        genre: 'Novela',
-        keywords: ['drama', 'amor'],
-      });
-      vi.mocked(askAI).mockResolvedValueOnce(mockResponse);
-
-      const result = await generateBookProposal({
-        title: 'Ficciones',
-        author: 'Jorge Luis Borges',
-      });
-
-      expect(askAI).toHaveBeenCalledWith({
-        prompt: expect.stringContaining('Ficciones'),
-        systemInstruction: AI_SELLER_SYSTEM_INSTRUCTION,
-        json: true,
-      });
-
-      expect(result.description).toBe('Sinopsis de prueba');
-      expect(result.genre).toBe('Novela');
-      expect(result.keywords).toEqual(['drama', 'amor']);
+    expect(askAI).toHaveBeenCalledWith({
+      prompt: expect.stringContaining('Rayuela'),
+      systemInstruction: AI_SELLER_SYSTEM_INSTRUCTION,
+      json: true,
     });
   });
 });
-

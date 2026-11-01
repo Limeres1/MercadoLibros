@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router';
 import { MessageSquarePlus, Pencil, ShieldAlert, Star, Trash2 } from 'lucide-react';
 
+import { paths } from '@/constants/routes';
 import { useSession } from '@/features/auth/SessionProvider';
-import { ReportTarget } from '@/features/catalog/reports/ReportsProvider';
+import { ReportTarget, useReports } from '@/features/catalog/reports/ReportsProvider';
 import { bookRatingStats, REVIEW_MAX_LENGTH } from '@/features/catalog/reviews/reviewsService';
 import { useBookReviews, useReviewActions } from '@/features/catalog/reviews/useBookReviews';
 import { formatDate, formatRating } from '@/lib/format';
@@ -143,9 +145,18 @@ interface ReviewItemProps {
   onEdit: (rating: number, comment: string) => Promise<boolean>;
   onDelete: () => Promise<boolean>;
   onReport?: () => void;
+  isReported: boolean;
 }
 
-const ReviewItem: React.FC<ReviewItemProps> = ({ review, isOwn, canModerate, onEdit, onDelete, onReport }) => {
+const ReviewItem: React.FC<ReviewItemProps> = ({
+  review,
+  isOwn,
+  canModerate,
+  onEdit,
+  onDelete,
+  onReport,
+  isReported,
+}) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
@@ -174,7 +185,9 @@ const ReviewItem: React.FC<ReviewItemProps> = ({ review, isOwn, canModerate, onE
           <img src={review.userPhoto || DEFAULT_AVATAR} alt="" className="h-9 w-9 rounded-full object-cover" />
           <div>
             <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-              {review.userName}
+              <Link to={paths.userProfile(review.userId)} className="hover:text-amber-700 hover:underline">
+                {review.userName}
+              </Link>
               {isOwn && (
                 <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">
                   Tu reseña
@@ -210,14 +223,21 @@ const ReviewItem: React.FC<ReviewItemProps> = ({ review, isOwn, canModerate, onE
               <Trash2 className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
-          {!isOwn && onReport && (
+          {!isOwn && isReported && (
+            <span className="inline-flex items-center gap-1 p-1.5 text-xs text-slate-400">
+              <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+              Denunciada
+            </span>
+          )}
+          {!isOwn && !isReported && onReport && (
             <button
               type="button"
               onClick={onReport}
               aria-label={`Denunciar la reseña de ${review.userName}`}
-              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-50 hover:text-red-700"
+              className="inline-flex items-center gap-1 rounded-md p-1.5 text-xs text-slate-500 hover:bg-slate-50 hover:text-red-700"
             >
               <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+              <span>Denunciar</span>
             </button>
           )}
         </div>
@@ -259,6 +279,7 @@ export const BookReviews: React.FC<BookReviewsProps> = ({ book, onReport }) => {
   const { currentUser } = useSession();
   const { reviews, ownReview, isLoading, canReview } = useBookReviews(book.id);
   const { addReview, editReview, removeReview } = useReviewActions();
+  const { hasReported } = useReports();
   const { rating: averageRating } = bookRatingStats(reviews);
 
   return (
@@ -335,17 +356,15 @@ export const BookReviews: React.FC<BookReviewsProps> = ({ book, onReport }) => {
               review={review}
               isOwn={review.userId === currentUser?.id}
               canModerate={currentUser?.role === 'admin'}
+              isReported={hasReported({ type: 'review', id: review.id })}
               onEdit={(rating, comment) => editReview(review.id, rating, comment)}
               onDelete={() => removeReview(review.id)}
-              onReport={
-                currentUser
-                  ? () =>
-                      onReport({
-                        type: 'review',
-                        id: review.id,
-                        title: `Reseña de ${review.userName} sobre ${book.title}`,
-                      })
-                  : undefined
+              onReport={() =>
+                onReport({
+                  type: 'review',
+                  id: review.id,
+                  title: `Reseña de ${review.userName} sobre ${book.title}`,
+                })
               }
             />
           ))}
