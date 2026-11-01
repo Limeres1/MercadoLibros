@@ -171,4 +171,28 @@ describe('useSellerBooks - CA-2 (Editar un libro publicado lo vuelve a revisión
     expect(mockUpdateBook).not.toHaveBeenCalled();
     expect(mockToast).toHaveBeenCalledWith(expect.stringContaining('Subí el archivo del libro'), 'error');
   });
+
+  describe('CA-1: Retirar un libro de la venta (withdrawBook)', () => {
+    it('sets status to withdrawn and shows informative toast about buyer library retention', async () => {
+      const { withdrawBook } = useSellerBooks();
+
+      await withdrawBook('book_pub_1');
+
+      expect(mockUpdateBook).toHaveBeenCalledWith('book_pub_1', { status: 'withdrawn' });
+      expect(mockToast).toHaveBeenCalledWith(
+        'El libro ha sido retirado de la venta. Los compradores previos conservan su acceso en biblioteca.',
+        'info',
+      );
+    });
+
+    it('does not display success toast if updateBook fails', async () => {
+      mockUpdateBook.mockResolvedValue(false);
+      const { withdrawBook } = useSellerBooks();
+
+      await withdrawBook('book_pub_1');
+
+      expect(mockUpdateBook).toHaveBeenCalledWith('book_pub_1', { status: 'withdrawn' });
+      expect(mockToast).not.toHaveBeenCalled();
+    });
+  });
 });

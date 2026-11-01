@@ -1,37 +1,81 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, Archive, BarChart3, BookOpen, CheckCircle, Clock, Edit3, Plus, Store } from 'lucide-react';
+import {
+  AlertTriangle,
+  Archive,
+  BarChart3,
+  BookOpen,
+  Calendar,
+  CheckCircle,
+  Clock,
+  Edit3,
+  Plus,
+  Receipt,
+  Store,
+} from 'lucide-react';
 
+import { useSession } from '@/features/auth/SessionProvider';
 import { CreateBookModal } from '@/features/seller/CreateBookModal';
+import { calculateSellerStats, PeriodType } from '@/features/seller/sellerStats';
 import { useSellerBooks } from '@/features/seller/useSellerBooks';
+import { useSellerOrders } from '@/features/seller/useSellerOrders';
 import { Book } from '@/types';
 
 export const SellerDashboard: React.FC = () => {
+  const { currentUser } = useSession();
   const { sellerBooks, saveBook, withdrawBook } = useSellerBooks();
-  const [period, setPeriod] = useState<'7d' | 'month' | 'year' | 'all'>('month');
+  const { orders } = useSellerOrders();
+  const [period, setPeriod] = useState<PeriodType>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [editor, setEditor] = useState<{ book: Book | null } | null>(null);
 
   const stats = useMemo(() => {
-    let totalSalesCount = 0;
-    let totalRevenue = 0;
-
-    sellerBooks.forEach(book => {
-      const sales = book.salesCount || 0;
-      totalSalesCount += sales;
-      totalRevenue += sales * book.price;
+    const sellerId = currentUser?.id || '';
+    const computed = calculateSellerStats(orders, sellerId, {
+      period,
+      startDate: startDate || null,
+      endDate: endDate || null,
     });
 
-    const factor = period === '7d' ? 0.25 : period === 'month' ? 0.65 : period === 'year' ? 0.95 : 1.0;
-
     return {
-      salesCount: Math.round(totalSalesCount * factor),
-      revenue: Number((totalRevenue * factor).toFixed(2)),
+      salesCount: computed.salesCount,
+      revenue: computed.revenue,
+      sales: computed.sales,
       publishedCount: sellerBooks.filter(book => book.status === 'published').length,
       pendingCount: sellerBooks.filter(book => book.status === 'pending_review').length,
       draftCount: sellerBooks.filter(book => book.status === 'draft').length,
       rejectedCount: sellerBooks.filter(book => book.status === 'rejected').length,
       withdrawnCount: sellerBooks.filter(book => book.status === 'withdrawn').length,
     };
-  }, [sellerBooks, period]);
+  }, [orders, currentUser?.id, period, startDate, endDate, sellerBooks]);
+
+  const handleSelectPeriod = (newPeriod: PeriodType) => {
+    setPeriod(newPeriod);
+    setStartDate('');
+    setEndDate('');
+  };
+
+  const handleStartDateChange = (val: string) => {
+    setStartDate(val);
+    setPeriod('custom');
+  };
+
+  const handleEndDateChange = (val: string) => {
+    setEndDate(val);
+    setPeriod('custom');
+  };
+
+  const handleSetDemoPeriod = () => {
+    setStartDate('2025-02-01');
+    setEndDate('2025-02-28');
+    setPeriod('custom');
+  };
+
+  const handleClearFilters = () => {
+    setPeriod('all');
+    setStartDate('');
+    setEndDate('');
+  };
 
   const handleEdit = (book: Book) => setEditor({ book });
 
@@ -70,67 +114,175 @@ export const SellerDashboard: React.FC = () => {
             <h2 className="text-base font-bold text-slate-900">Estadísticas de Venta y Facturación</h2>
           </div>
 
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
-            <button
-              onClick={() => setPeriod('7d')}
-              className={`px-3 py-1 rounded-lg transition-all ${
-                period === '7d' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              Últimos 7 días
-            </button>
-            <button
-              onClick={() => setPeriod('month')}
-              className={`px-3 py-1 rounded-lg transition-all ${
-                period === 'month' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              Este Mes
-            </button>
-            <button
-              onClick={() => setPeriod('year')}
-              className={`px-3 py-1 rounded-lg transition-all ${
-                period === 'year' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              Este Año
-            </button>
-            <button
-              onClick={() => setPeriod('all')}
-              className={`px-3 py-1 rounded-lg transition-all ${
-                period === 'all' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              Histórico Total
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+              <button
+                data-testid="filter-period-all"
+                onClick={() => handleSelectPeriod('all')}
+                className={`px-3 py-1 rounded-lg transition-all ${
+                  period === 'all' && !startDate && !endDate
+                    ? 'bg-white text-emerald-800 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Histórico Total
+              </button>
+              <button
+                data-testid="filter-period-month"
+                onClick={() => handleSelectPeriod('month')}
+                className={`px-3 py-1 rounded-lg transition-all ${
+                  period === 'month' && !startDate && !endDate
+                    ? 'bg-white text-emerald-800 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Este Mes
+              </button>
+              <button
+                data-testid="filter-period-year"
+                onClick={() => handleSelectPeriod('year')}
+                className={`px-3 py-1 rounded-lg transition-all ${
+                  period === 'year' && !startDate && !endDate
+                    ? 'bg-white text-emerald-800 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Este Año
+              </button>
+              <button
+                data-testid="filter-period-7d"
+                onClick={() => handleSelectPeriod('7d')}
+                className={`px-3 py-1 rounded-lg transition-all ${
+                  period === '7d' && !startDate && !endDate
+                    ? 'bg-white text-emerald-800 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Últimos 7 días
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
+              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="text-slate-500 font-medium">Desde:</span>
+              <input
+                type="date"
+                data-testid="filter-start-date"
+                value={startDate}
+                onChange={event => handleStartDateChange(event.target.value)}
+                className="bg-transparent border-0 text-slate-800 font-medium focus:outline-hidden text-xs p-0"
+              />
+              <span className="text-slate-500 font-medium ml-1">Hasta:</span>
+              <input
+                type="date"
+                data-testid="filter-end-date"
+                value={endDate}
+                onChange={event => handleEndDateChange(event.target.value)}
+                className="bg-transparent border-0 text-slate-800 font-medium focus:outline-hidden text-xs p-0"
+              />
+              {(startDate || endDate || period !== 'all') && (
+                <button
+                  data-testid="filter-clear-btn"
+                  onClick={handleClearFilters}
+                  className="ml-1 text-[11px] text-slate-400 hover:text-slate-700 underline font-semibold"
+                  title="Restablecer a Histórico Total"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 pt-1">
+          <p>Cálculo en tiempo real a partir de pedidos pagados (los importes no incluyen gastos de envío).</p>
+          <button
+            onClick={handleSetDemoPeriod}
+            className="text-emerald-700 hover:text-emerald-800 font-semibold underline text-[11px]"
+          >
+            Ver período demo (Febrero 2025)
+          </button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 bg-emerald-50/70 border border-emerald-200/60 rounded-2xl space-y-1">
-            <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Ingresos Estimados</span>
-            <p className="text-2xl font-black text-slate-900">${stats.revenue.toFixed(2)}</p>
-            <p className="text-[10px] text-emerald-800/80 font-medium">Facturación del período seleccionado</p>
+            <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Ingresos Facturados</span>
+            <p data-testid="stat-revenue" className="text-2xl font-black text-slate-900">
+              ${stats.revenue.toFixed(2)}
+            </p>
+            <p className="text-[10px] text-emerald-800/80 font-medium">Facturación de pedidos pagados en el período</p>
           </div>
 
           <div className="p-4 bg-blue-50/70 border border-blue-200/60 rounded-2xl space-y-1">
             <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">Ventas Concretadas</span>
-            <p className="text-2xl font-black text-slate-900">{stats.salesCount} u.</p>
-            <p className="text-[10px] text-blue-800/80 font-medium">Ejemplares vendidos</p>
+            <p data-testid="stat-sales-count" className="text-2xl font-black text-slate-900">
+              {stats.salesCount} u.
+            </p>
+            <p className="text-[10px] text-blue-800/80 font-medium">Ejemplares pagados</p>
           </div>
 
           <div className="p-4 bg-amber-50/70 border border-amber-200/60 rounded-2xl space-y-1">
             <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">En Revisión</span>
-            <p className="text-2xl font-black text-slate-900">{stats.pendingCount}</p>
+            <p data-testid="stat-pending-count" className="text-2xl font-black text-slate-900">
+              {stats.pendingCount}
+            </p>
             <p className="text-[10px] text-amber-800/80 font-medium">Esperando aprobación de admin</p>
           </div>
 
           <div className="p-4 bg-purple-50/70 border border-purple-200/60 rounded-2xl space-y-1">
             <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">Activos en Catálogo</span>
-            <p className="text-2xl font-black text-slate-900">{stats.publishedCount}</p>
+            <p data-testid="stat-published-count" className="text-2xl font-black text-slate-900">
+              {stats.publishedCount}
+            </p>
             <p className="text-[10px] text-purple-800/80 font-medium">Disponibles para compra pública</p>
           </div>
         </div>
+
+        {/* Detalle de ventas del período */}
+        {stats.sales.length > 0 ? (
+          <div className="pt-2">
+            <div className="flex items-center gap-2 mb-3">
+              <Receipt className="w-4 h-4 text-emerald-600" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Detalle de Ventas del Período ({stats.sales.length})
+              </h3>
+            </div>
+            <div className="overflow-x-auto border border-slate-100 rounded-2xl">
+              <table data-testid="sales-table" className="w-full text-left text-xs text-slate-600">
+                <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-2.5">Fecha</th>
+                    <th className="px-4 py-2.5">N° Pedido</th>
+                    <th className="px-4 py-2.5">Libro</th>
+                    <th className="px-4 py-2.5">Comprador</th>
+                    <th className="px-4 py-2.5 text-center">Cant.</th>
+                    <th className="px-4 py-2.5 text-right">Precio</th>
+                    <th className="px-4 py-2.5 text-right">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {stats.sales.map((sale, idx) => (
+                    <tr key={`${sale.orderId}-${sale.bookId}-${idx}`} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 font-medium text-slate-700">
+                        {new Date(sale.paidAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-slate-500">{sale.orderId}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-900">{sale.title}</td>
+                      <td className="px-4 py-3 text-slate-600">{sale.buyerName || 'Comprador'}</td>
+                      <td className="px-4 py-3 text-center font-bold text-slate-800">{sale.quantity}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">${sale.price.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-emerald-700">${sale.subtotal.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center text-xs text-slate-500">
+            No se registraron ventas pagadas para el rango de fechas seleccionado.
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden">
@@ -157,7 +309,7 @@ export const SellerDashboard: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600">
+            <table data-testid="books-table" className="w-full text-left text-xs text-slate-600">
               <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-100 font-semibold">
                 <tr>
                   <th className="px-6 py-3.5">Libro</th>
@@ -251,6 +403,7 @@ export const SellerDashboard: React.FC = () => {
                         )}
 
                         <button
+                          data-testid={`edit-book-${book.id}`}
                           onClick={() => handleEdit(book)}
                           className="p-1.5 text-slate-600 hover:text-amber-600 hover:bg-slate-100 rounded-lg transition-colors"
                           title="Editar libro propio"
@@ -260,6 +413,7 @@ export const SellerDashboard: React.FC = () => {
 
                         {book.status === 'published' && (
                           <button
+                            data-testid={`withdraw-book-${book.id}`}
                             onClick={() => withdrawBook(book.id)}
                             className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
                             title="Retirar de la venta (Mantiene acceso a compradores en su biblioteca)"
