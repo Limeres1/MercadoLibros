@@ -1,58 +1,68 @@
 import React, { FormEvent, useState } from 'react';
 import { Link } from 'react-router';
-import { BookOpen, LoaderCircle, Sparkles } from 'lucide-react';
+import { LoaderCircle, Sparkles } from 'lucide-react';
 
+import { API_ROUTES } from '@/constants/api';
 import { paths } from '@/constants/routes';
-import {
-  BookRecommendation,
-  buildRecommendationPrompt,
-  parseBookRecommendations,
-} from '@/features/catalog/recommendations';
-import { useAI } from '@/hooks/useAI';
-import { Book } from '@/types';
+import { useSession } from '@/features/auth/SessionProvider';
+import { useRequireLogin } from '@/features/auth/useRequireLogin';
+import { BookFormat } from '@/features/catalog/BookCard';
+import { useBooksByIds } from '@/features/catalog/BooksProvider';
+import { formatPrice } from '@/lib/format';
+import { API_ERRORS, ApiError, postApi } from '@/services/api';
 
-interface BookRecommendationsProps {
-  books: Book[];
-  isCatalogLoading: boolean;
-  catalogError: string | null;
+const REQUEST_MAX_LENGTH = 500;
+const EXAMPLES = [
+  'Una novela corta para leer en un viaje',
+  'Algo de misterio con buen ritmo',
+  'Poesía latinoamericana',
+];
+
+interface Recommendation {
+  bookId: string;
+  reason: string;
 }
 
-const SYSTEM_INSTRUCTION =
-  'Sos un librero que recomienda libros con calidez y brevedad. El catálogo contiene tuplas [id, título, autor, género, idioma, formato, precio, descripción]. Usa exclusivamente IDs que aparezcan en el catálogo recibido; nunca inventes libros ni IDs. Recomienda como máximo 3 libros y explica en una frase por qué encaja cada uno. Responde sólo JSON válido con esta forma: {"recommendations":[{"bookId":"ID existente","reason":"Motivo breve"}]}. Si ninguno encaja, devuelve {"recommendations":[]}.';
-
-export const BookRecommendations: React.FC<BookRecommendationsProps> = ({ books, isCatalogLoading, catalogError }) => {
-  const { ask, isLoading, error, resetError } = useAI();
+export const BookRecommendations: React.FC = () => {
+  const { currentUser } = useSession();
+  const requireLogin = useRequireLogin();
   const [request, setRequest] = useState('');
-  const [recommendations, setRecommendations] = useState<BookRecommendation[]>([]);
-  const [responseError, setResponseError] = useState<string | null>(null);
-  const publishedBooks = books.filter(book => book.status === 'published');
+  const [recommendations, setRecommendations] = useState<Recommendation[] | null>(null);
+  const [isAsking, setIsAsking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { books, isLoading: areBooksLoading } = useBooksByIds(recommendations?.map(item => item.bookId) ?? []);
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (isLoading || !request.trim() || isCatalogLoading || catalogError || publishedBooks.length === 0) return;
-    resetError();
-    setResponseError(null);
-    setRecommendations([]);
-
+  const ask = async (text: string) => {
+    if (!requireLogin('Iniciá sesión para pedir recomendaciones al asistente.')) return;
+    if (isAsking || text.trim().length < 3) return;
+    setIsAsking(true);
+    setError(null);
+    setRecommendations(null);
     try {
-      const prompt = buildRecommendationPrompt(request, publishedBooks);
-      const answer = await ask({ prompt, systemInstruction: SYSTEM_INSTRUCTION, json: true });
-      if (!answer) return;
-      const results = parseBookRecommendations(answer, publishedBooks);
-      setRecommendations(results);
-      if (results.length === 0)
-        setResponseError('No encontramos una recomendación adecuada. Probá describirlo de otra manera.');
+      const response = await postApi<{ recommendations: Recommendation[] }>(API_ROUTES.recommendations, {
+        request: text.trim(),
+      });
+      setRecommendations(response.recommendations);
     } catch (caught) {
-      setResponseError(
-        caught instanceof Error ? caught.message : 'No pudimos preparar las recomendaciones. Probá de nuevo más tarde.',
-      );
+      setError(caught instanceof ApiError ? caught.message : API_ERRORS.unknown);
+    } finally {
+      setIsAsking(false);
     }
   };
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    ask(request);
+  };
+
+  const shown = (recommendations ?? [])
+    .map(item => ({ ...item, book: books.find(book => book.id === item.bookId) }))
+    .filter(item => item.book);
 
   return (
     <section
       aria-labelledby="book-recommendations-title"
-      className="rounded-2xl border border-violet-200 bg-white p-4 shadow-sm sm:p-5"
+      className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-4 sm:p-5"
     >
       <div className="flex items-start gap-3">
         <span className="rounded-xl bg-violet-100 p-2 text-violet-700">
@@ -62,8 +72,8 @@ export const BookRecommendations: React.FC<BookRecommendationsProps> = ({ books,
           <h2 id="book-recommendations-title" className="font-bold text-slate-900">
             ¿Qué querés leer?
           </h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Contanos qué tenés ganas de leer y te recomendamos libros del catálogo.
+          <p className="mt-0.5 text-sm text-slate-600">
+            Contale al asistente qué buscás y te recomienda hasta 3 libros del catálogo.
           </p>
         </div>
       </div>
@@ -76,54 +86,85 @@ export const BookRecommendations: React.FC<BookRecommendationsProps> = ({ books,
           id="book-recommendation-request"
           value={request}
           onChange={event => setRequest(event.target.value)}
-          maxLength={500}
-          required
+          maxLength={REQUEST_MAX_LENGTH}
           placeholder="Ej.: una novela breve de misterio, con buen ritmo"
-          className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+          className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
         />
         <button
           type="submit"
-          disabled={isLoading || isCatalogLoading || Boolean(catalogError) || publishedBooks.length === 0}
+          disabled={isAsking || (Boolean(currentUser) && request.trim().length < 3)}
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isLoading || isCatalogLoading ? (
+          {isAsking ? (
             <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : (
             <Sparkles className="h-4 w-4" aria-hidden="true" />
           )}
-          {isCatalogLoading ? 'Cargando catálogo…' : isLoading ? 'Buscando…' : 'Recomendarme'}
+          {isAsking ? 'Buscando…' : currentUser ? 'Recomendarme' : 'Ingresá para pedir'}
         </button>
       </form>
 
-      {(error || catalogError || responseError) && (
-        <p role="alert" className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">
-          {error || catalogError || responseError} El catálogo sigue disponible para explorar.
-        </p>
-      )}
-
-      {!isCatalogLoading && !catalogError && publishedBooks.length === 0 && (
-        <p className="mt-3 text-sm text-slate-500">Todavía no hay libros publicados para recomendar.</p>
-      )}
-
-      {recommendations.length > 0 && (
-        <ul className="mt-4 grid gap-3 sm:grid-cols-3">
-          {recommendations.map(({ book, reason }) => (
-            <li key={book.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <Link
-                to={paths.book(book.id)}
-                className="flex items-start gap-3 rounded-md focus-visible:outline-2 focus-visible:outline-violet-700"
-              >
-                <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-violet-700" aria-hidden="true" />
-                <span>
-                  <span className="block font-semibold text-slate-900 hover:text-violet-800">{book.title}</span>
-                  <span className="mt-0.5 block text-xs text-slate-500">{book.author}</span>
-                  <span className="mt-2 block text-sm text-slate-700">{reason}</span>
-                </span>
-              </Link>
-            </li>
+      {!recommendations && !isAsking && !error && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {EXAMPLES.map(example => (
+            <button
+              key={example}
+              type="button"
+              onClick={() => {
+                setRequest(example);
+                ask(example);
+              }}
+              className="rounded-full border border-violet-200 bg-white px-3 py-1 text-xs text-violet-800 hover:border-violet-400"
+            >
+              {example}
+            </button>
           ))}
-        </ul>
+        </div>
       )}
+
+      <div aria-live="polite">
+        {error && (
+          <p role="alert" className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            {error} Mientras tanto, podés seguir explorando el catálogo.
+          </p>
+        )}
+
+        {recommendations && recommendations.length === 0 && (
+          <p className="mt-3 text-sm text-slate-600">
+            No encontramos libros que encajen con ese pedido. Probá describirlo de otra manera.
+          </p>
+        )}
+
+        {recommendations && recommendations.length > 0 && areBooksLoading && shown.length === 0 && (
+          <p className="mt-3 text-sm text-slate-500">Cargando las recomendaciones…</p>
+        )}
+
+        {shown.length > 0 && (
+          <ul className="mt-4 grid gap-3 sm:grid-cols-3">
+            {shown.map(({ book, reason }) =>
+              book ? (
+                <li key={book.id}>
+                  <Link
+                    to={paths.book(book.id)}
+                    className="flex h-full gap-3 rounded-xl border border-slate-200 bg-white p-3 hover:border-violet-300 focus-visible:outline-2 focus-visible:outline-violet-700"
+                  >
+                    <img src={book.coverUrl} alt="" className="h-24 w-16 shrink-0 rounded object-cover" />
+                    <span className="min-w-0">
+                      <span className="block font-serif font-semibold leading-snug text-slate-900">{book.title}</span>
+                      <span className="block text-xs text-slate-500">{book.author}</span>
+                      <BookFormat book={book} className="mt-1 text-xs" />
+                      <span className="mt-1.5 block text-sm text-slate-700">{reason}</span>
+                      <span className="mt-1 block text-sm font-bold tabular-nums text-slate-900">
+                        {formatPrice(book.price)}
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              ) : null,
+            )}
+          </ul>
+        )}
+      </div>
     </section>
   );
 };

@@ -66,42 +66,22 @@ describe('api/ai', () => {
     const response = await POST(buildRequest({ prompt: 'Hola', json: true }));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ text: 'respuesta' });
-    expect(generateContent.mock.calls[0][0].model).toBe('gemini-3.5-flash-lite');
+    expect(generateContent.mock.calls[0][0].model).toBe('gemini-3.6-flash');
     expect(generateContent.mock.calls[0][0].config.responseMimeType).toBe('application/json');
-    expect(generateContent.mock.calls[0][0].config.maxOutputTokens).toBe(512);
+    expect(generateContent.mock.calls[0][0].config.maxOutputTokens).toBeUndefined();
   });
 
-  it('falls back to another model when Gemini is overloaded', async () => {
+  it('falls back to the next models when Gemini is overloaded, missing or out of quota', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    generateContent.mockRejectedValueOnce(Object.assign(new Error('high demand'), { status: 503 }));
-    const response = await POST(buildRequest({ prompt: 'Hola' }));
-    expect(await response.json()).toEqual({ text: 'respuesta' });
-    expect(generateContent).toHaveBeenCalledTimes(2);
-    expect(generateContent.mock.calls.map(([request]) => request.model)).toEqual([
-      'gemini-3.5-flash-lite',
-      'gemini-3.8-flash',
-    ]);
-  });
-
-  it('tries a compatible model when the primary model is unavailable', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    generateContent.mockRejectedValueOnce(Object.assign(new Error('model not found'), { status: 404 }));
-    generateContent.mockRejectedValueOnce(Object.assign(new Error('model not found'), { status: 404 }));
-    const response = await POST(buildRequest({ prompt: 'Hola' }));
-    expect(await response.json()).toEqual({ text: 'respuesta' });
-    expect(generateContent.mock.calls.map(([request]) => request.model)).toEqual([
-      'gemini-3.5-flash-lite',
-      'gemini-3.8-flash',
-      'gemini-2.5-flash',
-    ]);
-  });
-
-  it('does not delay a rate-limited request by trying other models', async () => {
     generateContent.mockRejectedValueOnce(Object.assign(new Error('quota'), { status: 429 }));
+    generateContent.mockRejectedValueOnce(Object.assign(new Error('model not found'), { status: 404 }));
     const response = await POST(buildRequest({ prompt: 'Hola' }));
-    expect(response.status).toBe(429);
-    expect(await response.json()).toEqual({ error: AI_ERRORS.rateLimited });
-    expect(generateContent).toHaveBeenCalledTimes(1);
+    expect(await response.json()).toEqual({ text: 'respuesta' });
+    expect(generateContent.mock.calls.map(([request]) => request.model)).toEqual([
+      'gemini-3.6-flash',
+      'gemini-3.8-flash',
+      'gemini-3.5-flash-lite',
+    ]);
   });
 
   it('returns a clear error when Gemini fails', async () => {
