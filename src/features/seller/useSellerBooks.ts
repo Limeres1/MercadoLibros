@@ -46,6 +46,7 @@ export function useSellerBooks() {
         bookData.coverUrl ||
         'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=600&q=80',
       sampleText: bookData.sampleText || 'Fragmento no disponible.',
+      keywords: bookData.keywords,
       sellerId: currentUser.id,
       sellerName: currentUser.displayName,
       status: submitForReview ? 'pending_review' : 'draft',
