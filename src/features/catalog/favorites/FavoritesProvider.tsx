@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { deleteDoc, doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 
 import { useToast } from '@/components/ui/Toast';
 import { useSession } from '@/features/auth/SessionProvider';
@@ -50,8 +50,13 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (!user) return;
     const favoriteRef = doc(firestoreRefs.favorites(user.id), bookId);
     const exists = favorites.includes(bookId);
+    const showcase = currentUser?.favoriteBookIds ?? [];
     const write = exists
-      ? deleteDoc(favoriteRef)
+      ? deleteDoc(favoriteRef).then(() =>
+          showcase.includes(bookId)
+            ? updateDoc(firestoreRefs.user(user.id), { favoriteBookIds: showcase.filter(id => id !== bookId) })
+            : undefined,
+        )
       : setDoc(favoriteRef, { bookId, createdAt: new Date().toISOString() });
     void write
       .then(() =>

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router';
-import { ArrowLeft, Award, MapPin, Phone, Plus, Trash2, User } from 'lucide-react';
+import { Link, useNavigate } from 'react-router';
+import { ArrowLeft, Award, BookX, ExternalLink, MapPin, Phone, Plus, Trash2, User } from 'lucide-react';
 
+import { paths } from '@/constants/routes';
 import { FAVORITE_SHOWCASE_LIMIT } from '@/constants/statuses';
 import {
   ProfileField,
@@ -12,7 +13,7 @@ import {
 import { useSession } from '@/features/auth/SessionProvider';
 import { useBooksByIds } from '@/features/catalog/BooksProvider';
 import { useFavorites } from '@/features/catalog/favorites/FavoritesProvider';
-import { Book, UserProfile } from '@/types';
+import { UserProfile } from '@/types';
 
 export const ProfilePage: React.FC = () => {
   const { currentUser } = useSession();
@@ -33,10 +34,7 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
   const [validationErrors, setValidationErrors] = useState<ProfileValidationErrors>({});
 
   const selectedFavIds = currentUser.favoriteBookIds || [];
-  const { books } = useBooksByIds([...selectedFavIds, ...favorites]);
-  const selectedFavBooks = selectedFavIds
-    .map(id => books.find(book => book.id === id))
-    .filter((book): book is Book => Boolean(book));
+  const { books, isLoading: areBooksLoading } = useBooksByIds([...selectedFavIds, ...favorites]);
   const selectableBooks = books.filter(book => favorites.includes(book.id) && !selectedFavIds.includes(book.id));
 
   const handleSaveProfile = async (event: React.FormEvent) => {
@@ -86,6 +84,13 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
             <div>
               <h1 className="font-bold text-slate-900 text-base">Mi Perfil de Usuario</h1>
               <p className="text-xs text-slate-500">Edición de datos y tus 4 libros favoritos</p>
+              <Link
+                to={paths.userProfile(currentUser.id)}
+                className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-amber-700 hover:underline"
+              >
+                Ver mi perfil público
+                <ExternalLink className="h-3 w-3" aria-hidden="true" />
+              </Link>
             </div>
           </div>
           <button
@@ -332,46 +337,60 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
             )}
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[0, 1, 2, 3].map(slotIdx => {
-                const book = selectedFavBooks[slotIdx];
+              {Array.from({ length: FAVORITE_SHOWCASE_LIMIT }, (_slot, slotIndex) => {
+                const slotBookId = selectedFavIds[slotIndex];
+                const book = slotBookId ? books.find(candidate => candidate.id === slotBookId) : undefined;
+                const isUnavailable = Boolean(slotBookId) && !book && !areBooksLoading;
 
                 return (
                   <div
-                    key={slotIdx}
+                    key={slotIndex}
                     className={`rounded-2xl border p-3 flex flex-col items-center justify-center text-center relative aspect-3/4 transition-all ${
-                      book ? 'bg-slate-50 border-slate-200 shadow-2xs' : 'border-dashed border-slate-300 bg-slate-50/50'
+                      slotBookId
+                        ? 'bg-slate-50 border-slate-200 shadow-2xs'
+                        : 'border-dashed border-slate-300 bg-slate-50/50'
                     }`}
                   >
                     <span className="absolute top-2 left-2 w-5 h-5 rounded-full bg-slate-800 text-white font-bold text-[10px] flex items-center justify-center">
-                      #{slotIdx + 1}
+                      #{slotIndex + 1}
                     </span>
+
+                    {slotBookId && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveFavoriteBook(slotBookId)}
+                        aria-label={`Quitar ${book?.title ?? 'este libro'} de la vitrina`}
+                        className="absolute top-2 right-2 p-1 text-slate-400 hover:text-rose-600 rounded bg-white/80 shadow-2xs"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                      </button>
+                    )}
 
                     {book ? (
                       <>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveFavoriteBook(book.id)}
-                          className="absolute top-2 right-2 p-1 text-slate-400 hover:text-rose-600 rounded bg-white/80 shadow-2xs"
-                          title="Quitar de favoritos del perfil"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
                         <img
                           src={book.coverUrl}
-                          alt={book.title}
+                          alt=""
                           className="w-14 h-20 object-cover rounded-md shadow-xs mb-2 border border-slate-200"
                         />
                         <p className="text-xs font-bold text-slate-900 line-clamp-1 w-full">{book.title}</p>
                         <p className="text-[10px] text-slate-500 truncate w-full">{book.author}</p>
                       </>
+                    ) : isUnavailable ? (
+                      <p className="flex flex-col items-center gap-1 text-[11px] text-slate-500">
+                        <BookX className="w-6 h-6 text-slate-400" aria-hidden="true" />
+                        Libro no disponible
+                      </p>
+                    ) : slotBookId ? (
+                      <span className="h-20 w-14 animate-pulse rounded-md bg-slate-200" aria-hidden="true" />
                     ) : (
                       <button
                         type="button"
                         onClick={() => setIsSelectingBook(true)}
                         className="flex flex-col items-center gap-1 text-slate-400 hover:text-amber-600 transition-colors p-2"
                       >
-                        <Plus className="w-6 h-6" />
-                        <span className="text-[11px] font-medium">Espacio #{slotIdx + 1}</span>
+                        <Plus className="w-6 h-6" aria-hidden="true" />
+                        <span className="text-[11px] font-medium">Espacio #{slotIndex + 1}</span>
                       </button>
                     )}
                   </div>

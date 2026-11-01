@@ -116,7 +116,14 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
     { label: 'Páginas', value: String(book.pages) },
     { label: 'Año de publicación', value: String(book.publicationYear) },
     { label: 'ISBN', value: book.isbn || 'Sin ISBN' },
-    { label: 'Vendedor', value: book.sellerName },
+    {
+      label: 'Vendedor',
+      value: (
+        <Link to={paths.userProfile(book.sellerId)} className="text-amber-700 hover:underline">
+          {book.sellerName}
+        </Link>
+      ),
+    },
   ];
 
   return (
