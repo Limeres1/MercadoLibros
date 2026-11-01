@@ -1,15 +1,14 @@
-import { GoogleGenAI } from '@google/genai';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
-const GEMINI_TIMEOUT_MS = 20_000;
-const DEFAULT_MODEL = 'gemini-3.8-flash';
-const FALLBACK_MODEL = 'gemini-3.6-flash';
-const RETRYABLE_STATUSES = [429, 500, 503];
+import { generateText } from './_lib/gemini.js';
+import { isRateLimited } from './_lib/rateLimit.js';
+
+export { isRateLimited, RATE_LIMIT } from './_lib/rateLimit.js';
+
 const FIREBASE_JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
 const FIREBASE_ISSUER = 'https://securetoken.google.com/';
 const MAX_PROMPT_LENGTH = 8000;
 const MAX_SYSTEM_LENGTH = 2000;
-export const RATE_LIMIT = { requests: 10, windowMs: 60_000 };
 
 export const AI_ERRORS = {
   unauthorized: 'Iniciá sesión para usar las funciones de IA.',
@@ -26,7 +25,6 @@ interface AIRequestBody {
 }
 
 const firebaseKeys = createRemoteJWKSet(new URL(FIREBASE_JWKS_URL));
-const requestLog = new Map<string, number[]>();
 
 const jsonResponse = (body: object, status = 200) => Response.json(body, { status });
 
@@ -42,13 +40,6 @@ export async function verifyUser(authorization: string | null, projectId: string
   } catch {
     return null;
   }
-}
-
-export function isRateLimited(userId: string, now = Date.now()): boolean {
-  const recent = (requestLog.get(userId) ?? []).filter(timestamp => now - timestamp < RATE_LIMIT.windowMs);
-  const limited = recent.length >= RATE_LIMIT.requests;
-  requestLog.set(userId, limited ? recent : [...recent, now]);
-  return limited;
 }
 
 export function parseBody(body: unknown): AIRequestBody | null {
@@ -77,27 +68,11 @@ export async function POST(request: Request): Promise<Response> {
   const body = parseBody(await request.json().catch(() => null));
   if (!body) return jsonResponse({ error: AI_ERRORS.invalidRequest }, 400);
 
-  const gemini = new GoogleGenAI({
-    apiKey,
-    httpOptions: { timeout: GEMINI_TIMEOUT_MS, retryOptions: { attempts: 1 } },
+  const text = await generateText(apiKey, {
+    contents: body.prompt,
+    systemInstruction: body.systemInstruction,
+    json: body.json,
   });
-  const models = [...new Set([process.env.GEMINI_MODEL || DEFAULT_MODEL, FALLBACK_MODEL])];
-  for (const model of models) {
-    try {
-      const response = await gemini.models.generateContent({
-        model,
-        contents: body.prompt,
-        config: {
-          systemInstruction: body.systemInstruction,
-          responseMimeType: body.json ? 'application/json' : undefined,
-        },
-      });
-      if (response.text) return jsonResponse({ text: response.text });
-    } catch (error) {
-      console.error(`Gemini request failed (${model})`, error);
-      const status = (error as { status?: number }).status;
-      if (status && !RETRYABLE_STATUSES.includes(status)) break;
-    }
-  }
+  if (text) return jsonResponse({ text });
   return jsonResponse({ error: AI_ERRORS.unavailable }, 502);
 }
