@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router';
 import { MessageSquarePlus, Pencil, ShieldAlert, Star, Trash2 } from 'lucide-react';
 
+import { paths } from '@/constants/routes';
 import { useSession } from '@/features/auth/SessionProvider';
 import { ReportTarget, useReports } from '@/features/catalog/reports/ReportsProvider';
 import { bookRatingStats, REVIEW_MAX_LENGTH } from '@/features/catalog/reviews/reviewsService';
@@ -183,7 +185,9 @@ const ReviewItem: React.FC<ReviewItemProps> = ({
           <img src={review.userPhoto || DEFAULT_AVATAR} alt="" className="h-9 w-9 rounded-full object-cover" />
           <div>
             <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-              {review.userName}
+              <Link to={paths.userProfile(review.userId)} className="hover:text-amber-700 hover:underline">
+                {review.userName}
+              </Link>
               {isOwn && (
                 <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">
                   Tu reseña
