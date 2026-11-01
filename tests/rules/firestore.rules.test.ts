@@ -161,6 +161,27 @@ describe('books', () => {
     await assertFails(updateDoc(doc(dbAs(SELLER), COLLECTIONS.books, BOOK), { salesCount: 999 }));
   });
 
+  it('D1: accepts an uploaded cover embedded as a compressed image, but not other data', async () => {
+    const db = dbAs(SELLER);
+    const cover = `data:image/jpeg;base64,${'A'.repeat(60000)}`;
+    await assertSucceeds(setDoc(doc(db, COLLECTIONS.books, 'book_new'), book({ coverUrl: cover })));
+    await assertFails(
+      setDoc(doc(db, COLLECTIONS.books, 'book_html'), book({ coverUrl: `data:text/html;base64,${'A'.repeat(2000)}` })),
+    );
+    await assertFails(
+      setDoc(
+        doc(db, COLLECTIONS.books, 'book_big'),
+        book({ coverUrl: `data:image/jpeg;base64,${'A'.repeat(160000)}` }),
+      ),
+    );
+  });
+
+  it('D1: a published book cannot be edited without going back to review', async () => {
+    const ref = doc(dbAs(SELLER), COLLECTIONS.books, BOOK);
+    await assertFails(updateDoc(ref, { price: 99 }));
+    await assertSucceeds(updateDoc(ref, { price: 99, status: 'pending_review' }));
+  });
+
   it('blocked sellers cannot publish books', async () => {
     await testEnv.withSecurityRulesDisabled(context =>
       updateDoc(doc(context.firestore(), COLLECTIONS.users, SELLER), { isBlocked: true }),
