@@ -1,22 +1,39 @@
-export type UserRole = 'visitor' | 'buyer' | 'seller' | 'admin';
+import {
+  ACCOUNT_ROLES,
+  AUDIT_ACTIONS,
+  BOOK_CONDITIONS,
+  BOOK_STATUSES,
+  ORDER_STATUSES,
+  READER_THEMES,
+  REPORT_STATUSES,
+  REPORT_TARGET_TYPES,
+  SIGNUP_ROLES,
+} from '@/constants/statuses';
+
+export type AccountRole = (typeof ACCOUNT_ROLES)[number];
+export type UserRole = AccountRole | 'visitor';
+export type SignupRole = (typeof SIGNUP_ROLES)[number];
+export type BookCondition = (typeof BOOK_CONDITIONS)[number];
+export type BookStatus = (typeof BOOK_STATUSES)[number];
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+export type ReportStatus = (typeof REPORT_STATUSES)[number];
+export type ReportTargetType = (typeof REPORT_TARGET_TYPES)[number];
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 export interface UserProfile {
   id: string;
   email: string;
   displayName: string;
-  role: UserRole;
+  role: AccountRole;
   photoURL?: string;
   bio?: string;
   location?: string;
   phone?: string;
-  favoriteBookIds?: string[]; // Max 4 libros favoritos (RF-6)
+  favoriteBookIds?: string[];
   isBlocked?: boolean;
   blockReason?: string;
   createdAt: string;
 }
-
-export type BookCondition = 'nuevo' | 'usado' | 'digital';
-export type BookStatus = 'draft' | 'pending_review' | 'published' | 'rejected' | 'withdrawn';
 
 export interface Book {
   id: string;
@@ -30,7 +47,6 @@ export interface Book {
   language: string;
   coverUrl: string;
   sampleText: string;
-  fullContent: string;
   sellerId: string;
   sellerName: string;
   status: BookStatus;
@@ -41,7 +57,15 @@ export interface Book {
   pages: number;
   publicationYear: number;
   stock?: number;
+  searchTokens?: string[];
+  keywords?: string[];
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface BookContent {
+  bookId: string;
+  text: string;
   updatedAt: string;
 }
 
@@ -51,7 +75,7 @@ export interface Review {
   userId: string;
   userName: string;
   userPhoto?: string;
-  rating: number; // 1 to 5
+  rating: number;
   comment: string;
   createdAt: string;
   updatedAt?: string;
@@ -62,13 +86,36 @@ export interface CartItem {
   quantity: number;
 }
 
+export interface CartEntry {
+  bookId: string;
+  quantity: number;
+  addedAt: string;
+}
+
+export interface FavoriteEntry {
+  bookId: string;
+  createdAt: string;
+}
+
 export interface OrderItem {
   bookId: string;
+  sellerId: string;
   title: string;
   author: string;
   price: number;
+  quantity: number;
   coverUrl: string;
   condition: BookCondition;
+}
+
+export interface SellerSale {
+  orderId: string;
+  paidAt: string;
+  bookId: string;
+  title: string;
+  quantity: number;
+  price: number;
+  buyerName: string;
 }
 
 export interface Order {
@@ -77,11 +124,21 @@ export interface Order {
   buyerName: string;
   buyerEmail: string;
   items: OrderItem[];
+  sellerIds: string[];
+  subtotal: number;
+  shippingCost: number;
   totalAmount: number;
   paymentMethod: string;
+  paymentId?: string;
+  preferenceId?: string;
+  checkoutUrl?: string;
   shippingAddress?: string;
-  status: 'completed' | 'pending';
+  shippingLocation?: { lat: number; lng: number };
+  status: OrderStatus;
   createdAt: string;
+  paidAt?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
 }
 
 export interface Bookmark {
@@ -92,10 +149,17 @@ export interface Bookmark {
   createdAt: string;
 }
 
+export interface Purchase {
+  bookId: string;
+  orderId: string;
+  purchasedAt: string;
+}
+
 export interface LibraryItem {
   id: string;
   userId: string;
   bookId: string;
+  orderId: string;
   title: string;
   author: string;
   coverUrl: string;
@@ -109,19 +173,33 @@ export interface Report {
   id: string;
   reporterId: string;
   reporterName: string;
-  targetType: 'book' | 'review';
+  targetType: ReportTargetType;
   targetId: string;
   targetTitle: string;
   reason: string;
   details: string;
-  status: 'pending' | 'resolved' | 'dismissed';
+  status: ReportStatus;
   adminNote?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  createdAt: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  adminId: string;
+  adminName: string;
+  action: AuditAction;
+  targetType: 'book' | 'review' | 'user' | 'report';
+  targetId: string;
+  targetLabel: string;
+  reason?: string;
   createdAt: string;
 }
 
 export interface ReaderSettings {
-  fontSize: number; // 14, 16, 18, 20, 24
-  theme: 'light' | 'sepia' | 'dark';
+  fontSize: number;
+  theme: (typeof READER_THEMES)[number];
   fontFamily: 'serif' | 'sans';
   lineHeight: 'normal' | 'relaxed' | 'loose';
 }

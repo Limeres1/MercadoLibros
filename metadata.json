@@ -1,9 +1,0 @@
-{
-  "name": "Mercado Libros",
-  "description": "Plataforma integral para el comercio, lectura y gestión de libros nuevos y usados, con compras, lector digital integrado y moderación.",
-  "requestFramePermissions": [
-    "camera"
-  ],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
-
