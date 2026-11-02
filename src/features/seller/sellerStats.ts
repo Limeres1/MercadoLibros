@@ -1,15 +1,28 @@
 import { Order } from '@/types';
 
-export type PeriodType = '7d' | 'month' | 'year' | 'all' | 'custom';
+export const SALES_PERIODS = {
+  all: 'all',
+  year: 'year',
+  month: 'month',
+  last7Days: 'last7Days',
+  custom: 'custom',
+} as const;
 
-export interface DateRangeOptions {
-  period?: PeriodType;
-  startDate?: string | null; // Format: 'YYYY-MM-DD'
-  endDate?: string | null; // Format: 'YYYY-MM-DD'
-  now?: Date;
+export type SalesPeriod = (typeof SALES_PERIODS)[keyof typeof SALES_PERIODS];
+
+export const SALES_PERIOD_LABELS: Record<Exclude<SalesPeriod, 'custom'>, string> = {
+  [SALES_PERIODS.all]: 'Todo',
+  [SALES_PERIODS.year]: 'Este año',
+  [SALES_PERIODS.month]: 'Este mes',
+  [SALES_PERIODS.last7Days]: 'Últimos 7 días',
+};
+
+export interface DateRange {
+  from: number | null;
+  to: number | null;
 }
 
-export interface SellerSaleItem {
+export interface SellerSale {
   orderId: string;
   paidAt: string;
   bookId: string;
@@ -17,124 +30,88 @@ export interface SellerSaleItem {
   quantity: number;
   price: number;
   subtotal: number;
-  condition: string;
-  buyerName?: string;
-  paymentMethod?: string;
+  buyerName: string;
 }
 
-export interface SellerStatsResult {
+export interface SellerStats {
   salesCount: number;
+  orderCount: number;
   revenue: number;
-  sales: SellerSaleItem[];
+  sales: SellerSale[];
 }
 
-function parseDateBoundary(dateStr: string, isEnd: boolean): number {
-  if (dateStr.includes('T')) {
-    return new Date(dateStr).getTime();
-  }
-  const parts = dateStr.split('-').map(Number);
-  if (parts.length === 3 && parts.every(num => !Number.isNaN(num))) {
-    const [year, month, day] = parts;
-    return isEnd
-      ? new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999)).getTime()
-      : new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0)).getTime();
-  }
-  const date = new Date(dateStr);
-  return date.getTime();
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const parseLocalDate = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [year, month, day] = match.slice(1).map(Number);
+  return new Date(year, month - 1, day).getTime();
+};
+
+export function rangeError(startDate: string, endDate: string) {
+  const from = parseLocalDate(startDate);
+  const to = parseLocalDate(endDate);
+  return from !== null && to !== null && from > to ? 'La fecha «desde» es posterior a la fecha «hasta».' : null;
 }
 
-export function isOrderInDateRange(order: Order, options: DateRangeOptions): boolean {
-  if (order.status !== 'paid') return false;
-
-  const { period = 'all', startDate, endDate, now = new Date() } = options;
-
-  if (period === 'all' && !startDate && !endDate) {
-    return true;
-  }
-
-  const orderTimeStr = order.paidAt || order.createdAt;
-  if (!orderTimeStr) return false;
-  const orderTime = new Date(orderTimeStr).getTime();
-  if (Number.isNaN(orderTime)) return false;
-
-  if (startDate || endDate || period === 'custom') {
-    if (startDate) {
-      const startTime = parseDateBoundary(startDate, false);
-      if (orderTime < startTime) return false;
+export function periodRange(period: SalesPeriod, startDate = '', endDate = '', now = new Date()): DateRange {
+  switch (period) {
+    case SALES_PERIODS.year:
+      return { from: new Date(now.getFullYear(), 0, 1).getTime(), to: new Date(now.getFullYear() + 1, 0, 1).getTime() };
+    case SALES_PERIODS.month:
+      return {
+        from: new Date(now.getFullYear(), now.getMonth(), 1).getTime(),
+        to: new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime(),
+      };
+    case SALES_PERIODS.last7Days:
+      return { from: now.getTime() - 7 * DAY_MS, to: now.getTime() + 1 };
+    case SALES_PERIODS.custom: {
+      const end = parseLocalDate(endDate);
+      return {
+        from: parseLocalDate(startDate),
+        to: end === null ? null : new Date(end).setDate(new Date(end).getDate() + 1),
+      };
     }
-    if (endDate) {
-      const endTime = parseDateBoundary(endDate, true);
-      if (orderTime > endTime) return false;
-    }
-    return true;
+    default:
+      return { from: null, to: null };
   }
-
-  if (period === '7d') {
-    const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    return orderTime >= start.getTime() && orderTime <= now.getTime();
-  }
-
-  if (period === 'month') {
-    const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    return orderTime >= start.getTime() && orderTime <= end.getTime();
-  }
-
-  if (period === 'year') {
-    const start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-    const end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
-    return orderTime >= start.getTime() && orderTime <= end.getTime();
-  }
-
-  return true;
 }
 
-export function calculateSellerStats(
-  orders: Order[],
-  sellerId: string,
-  options: DateRangeOptions = { period: 'all' },
-): SellerStatsResult {
+const toCents = (amount: number) => Math.round(amount * 100);
+
+export function calculateSellerStats(orders: Order[], sellerId: string, range: DateRange): SellerStats {
+  const sales: SellerSale[] = [];
+  const orderIds = new Set<string>();
+  let revenueCents = 0;
   let salesCount = 0;
-  let revenue = 0;
-  const sales: SellerSaleItem[] = [];
 
-  if (!sellerId || !Array.isArray(orders)) {
-    return { salesCount: 0, revenue: 0, sales: [] };
-  }
-
-  const eligibleOrders = orders.filter(order => isOrderInDateRange(order, options));
-
-  for (const order of eligibleOrders) {
-    if (!Array.isArray(order.items)) continue;
+  for (const order of orders) {
+    if (order.status !== 'paid' || !order.paidAt) continue;
+    const paidTime = new Date(order.paidAt).getTime();
+    if (Number.isNaN(paidTime)) continue;
+    if (range.from !== null && paidTime < range.from) continue;
+    if (range.to !== null && paidTime >= range.to) continue;
 
     for (const item of order.items) {
-      if (item.sellerId === sellerId) {
-        const qty = Number(item.quantity) || 1;
-        const price = Number(item.price) || 0;
-        const subtotal = Number((price * qty).toFixed(2));
-
-        salesCount += qty;
-        revenue += subtotal;
-
-        sales.push({
-          orderId: order.id,
-          paidAt: order.paidAt || order.createdAt,
-          bookId: item.bookId,
-          title: item.title,
-          quantity: qty,
-          price,
-          subtotal,
-          condition: item.condition,
-          buyerName: order.buyerName,
-          paymentMethod: order.paymentMethod,
-        });
-      }
+      if (item.sellerId !== sellerId) continue;
+      const subtotalCents = toCents(item.price) * item.quantity;
+      revenueCents += subtotalCents;
+      salesCount += item.quantity;
+      orderIds.add(order.id);
+      sales.push({
+        orderId: order.id,
+        paidAt: order.paidAt,
+        bookId: item.bookId,
+        title: item.title,
+        quantity: item.quantity,
+        price: item.price,
+        subtotal: subtotalCents / 100,
+        buyerName: order.buyerName,
+      });
     }
   }
 
-  return {
-    salesCount,
-    revenue: Number(revenue.toFixed(2)),
-    sales: sales.sort((first, second) => second.paidAt.localeCompare(first.paidAt)),
-  };
+  sales.sort((first, second) => second.paidAt.localeCompare(first.paidAt));
+  return { salesCount, orderCount: orderIds.size, revenue: revenueCents / 100, sales };
 }

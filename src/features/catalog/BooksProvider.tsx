@@ -142,7 +142,7 @@ export const BooksProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const updateBook = useCallback(async (id: string, patch: Partial<Book>) => {
     const current = cacheRef.current[id];
-    const touchesSearch = 'title' in patch || 'author' in patch || 'isbn' in patch;
+    const touchesSearch = 'title' in patch || 'author' in patch || 'isbn' in patch || 'keywords' in patch;
     const searchTokens = touchesSearch && current ? buildSearchTokens({ ...current, ...patch }) : undefined;
     try {
       await updateDoc(

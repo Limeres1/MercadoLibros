@@ -74,14 +74,28 @@ describe('api/ai', () => {
   it('falls back to the next models when Gemini is overloaded, missing or out of quota', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     generateContent.mockRejectedValueOnce(Object.assign(new Error('quota'), { status: 429 }));
-    generateContent.mockRejectedValueOnce(Object.assign(new Error('model not found'), { status: 404 }));
+    generateContent.mockRejectedValueOnce(Object.assign(new Error('gateway timeout'), { status: 504 }));
     const response = await POST(buildRequest({ prompt: 'Hola' }));
     expect(await response.json()).toEqual({ text: 'respuesta' });
     expect(generateContent.mock.calls.map(([request]) => request.model)).toEqual([
       'gemini-3.6-flash',
-      'gemini-3.8-flash',
       'gemini-3.5-flash-lite',
+      'gemini-3.8-flash',
     ]);
+  });
+
+  it('stops trying other models when the time budget is spent', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    generateContent.mockImplementationOnce(async () => {
+      vi.setSystemTime(Date.now() + 18_000);
+      throw Object.assign(new Error('timeout'), { status: 504 });
+    });
+    const response = await POST(buildRequest({ prompt: 'Hola' }));
+    vi.useRealTimers();
+    expect(response.status).toBe(502);
+    expect(generateContent).toHaveBeenCalledTimes(1);
+    expect(generateContent.mock.calls[0][0].config.httpOptions.timeout).toBe(12_000);
   });
 
   it('returns a clear error when Gemini fails', async () => {

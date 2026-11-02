@@ -4,7 +4,20 @@ import {
   initializeTestEnvironment,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { arrayRemove, arrayUnion, deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import {
+  arrayRemove,
+  arrayUnion,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+  writeBatch,
+} from 'firebase/firestore';
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -182,6 +195,15 @@ describe('books', () => {
     await assertSucceeds(updateDoc(ref, { price: 99, status: 'pending_review' }));
   });
 
+  it('D4: keeps the keyword list of a book short', async () => {
+    const db = dbAs(SELLER);
+    await assertSucceeds(setDoc(doc(db, COLLECTIONS.books, 'book_new'), book({ keywords: ['misterio', 'tango'] })));
+    await assertFails(
+      setDoc(doc(db, COLLECTIONS.books, 'book_many'), book({ keywords: Array.from({ length: 9 }, String) })),
+    );
+    await assertFails(setDoc(doc(db, COLLECTIONS.books, 'book_text'), book({ keywords: 'misterio' })));
+  });
+
   it('blocked sellers cannot publish books', async () => {
     await testEnv.withSecurityRulesDisabled(context =>
       updateDoc(doc(context.firestore(), COLLECTIONS.users, SELLER), { isBlocked: true }),
@@ -284,6 +306,13 @@ describe('orders', () => {
     await assertSucceeds(getDoc(doc(dbAs(BUYER), COLLECTIONS.orders, 'order_1')));
     await assertSucceeds(getDoc(doc(dbAs(SELLER), COLLECTIONS.orders, 'order_1')));
     await assertFails(getDoc(doc(dbAs(OTHER_BUYER), COLLECTIONS.orders, 'order_1')));
+  });
+
+  it('D2 CA-3: a seller lists only the orders that include their books', async () => {
+    const orders = collection(dbAs(SELLER), COLLECTIONS.orders);
+    await assertSucceeds(getDocs(query(orders, where('sellerIds', 'array-contains', SELLER))));
+    await assertFails(getDocs(query(orders, where('sellerIds', 'array-contains', OTHER_BUYER))));
+    await assertFails(getDocs(orders));
   });
 });
 

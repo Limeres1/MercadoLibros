@@ -58,6 +58,7 @@ export interface Book {
   publicationYear: number;
   stock?: number;
   searchTokens?: string[];
+  keywords?: string[];
   createdAt: string;
   updatedAt: string;
 }

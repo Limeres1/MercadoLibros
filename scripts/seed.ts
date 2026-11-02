@@ -2,14 +2,8 @@ import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
-import { COLLECTIONS, USER_SUBCOLLECTIONS } from '@/constants/firestore';
-import {
-  INITIAL_BOOK_CONTENTS,
-  INITIAL_BOOKS,
-  INITIAL_LIBRARY,
-  INITIAL_ORDERS,
-  INITIAL_USERS,
-} from '@/data/initialData';
+import { COLLECTIONS } from '@/constants/firestore';
+import { INITIAL_BOOK_CONTENTS, INITIAL_BOOKS, INITIAL_USERS } from '@/data/initialData';
 
 const password = process.env.SEED_DEMO_PASSWORD;
 const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
@@ -39,12 +33,8 @@ INITIAL_BOOKS.forEach(({ id, ...book }) => batch.set(db.collection(COLLECTIONS.b
 INITIAL_BOOK_CONTENTS.forEach(({ bookId, ...content }) =>
   batch.set(db.collection(COLLECTIONS.bookContents).doc(bookId), content),
 );
-INITIAL_ORDERS.forEach(({ id, ...order }) => batch.set(db.collection(COLLECTIONS.orders).doc(id), order));
-INITIAL_LIBRARY.forEach(({ id, userId, ...item }) =>
-  batch.set(db.collection(COLLECTIONS.users).doc(userId).collection(USER_SUBCOLLECTIONS.library).doc(id), item),
-);
 await batch.commit();
 
 console.log(
-  `Firestore: ${INITIAL_USERS.length} usuarios, ${INITIAL_BOOKS.length} libros, ${INITIAL_BOOK_CONTENTS.length} contenidos, ${INITIAL_ORDERS.length} pedidos demo, ${INITIAL_LIBRARY.length} items de biblioteca.`,
+  `Firestore: ${INITIAL_USERS.length} usuarios, ${INITIAL_BOOKS.length} libros, ${INITIAL_BOOK_CONTENTS.length} contenidos.`,
 );
