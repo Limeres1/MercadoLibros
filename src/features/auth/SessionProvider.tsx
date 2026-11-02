@@ -153,7 +153,11 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       profile = buildProfile(user, displayName || user.displayName || user.email?.split('@')[0] || 'Lector', role);
       await setDoc(profileRef, profile);
     }
-    if (profile.isBlocked) return false;
+    if (profile.isBlocked) {
+      await signOut(auth).catch(() => undefined);
+      showToast(`Tu cuenta se encuentra bloqueada. Motivo: ${profile.blockReason || DEFAULT_BLOCK_REASON}`, 'error');
+      return false;
+    }
     closeAuth();
     showToast(`¡Bienvenido, ${profile.displayName}!`, 'success');
     return true;

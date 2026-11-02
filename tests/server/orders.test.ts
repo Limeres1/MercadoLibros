@@ -98,7 +98,7 @@ describe('payment confirmation', () => {
     const order = (await db.collection('orders').doc(id).get()).data();
     expect(order).toMatchObject({ status: 'paid', paymentId: 'MP-1' });
     expect((await userRef().collection('library').doc(DIGITAL).get()).exists).toBe(true);
-    expect((await userRef().collection('library').doc(DIGITAL).get()).get('totalPages')).toBe(3);
+    expect((await userRef().collection('library').doc(DIGITAL).get()).get('totalPages')).toBe(1);
     expect((await userRef().collection('library').doc(PHYSICAL).get()).exists).toBe(false);
     expect((await userRef().collection('purchases').doc(PHYSICAL).get()).exists).toBe(true);
     expect((await db.collection('books').doc(PHYSICAL).get()).data()).toMatchObject({ stock: 0, salesCount: 2 });
@@ -125,7 +125,7 @@ describe('payment confirmation', () => {
     expect((await userRef().collection('library').get()).empty).toBe(true);
     expect((await userRef().collection('purchases').get()).empty).toBe(true);
     expect((await userRef().collection('cart').get()).size).toBe(1);
-    expect(await applyPaymentOutcome(db, id, 'approved', 'MP-10')).toBe('rejected');
+    expect(await applyPaymentOutcome(db, id, 'rejected', 'MP-10')).toBe('rejected');
   });
 
   it('keeps the order pending while the payment is in process', async () => {

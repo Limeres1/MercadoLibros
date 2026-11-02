@@ -137,6 +137,8 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   paidAt?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
 }
 
 export interface Bookmark {
