@@ -4,7 +4,20 @@ import {
   initializeTestEnvironment,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { arrayRemove, arrayUnion, deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import {
+  arrayRemove,
+  arrayUnion,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+  writeBatch,
+} from 'firebase/firestore';
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -289,10 +302,15 @@ describe('orders', () => {
     await assertFails(updateDoc(doc(dbAs(BUYER), COLLECTIONS.orders, 'order_1'), { status: 'paid' }));
   });
 
-  it('buyer and seller read the order, other users do not', async () => {
+  it('only the buyer reads the order', async () => {
     await assertSucceeds(getDoc(doc(dbAs(BUYER), COLLECTIONS.orders, 'order_1')));
-    await assertSucceeds(getDoc(doc(dbAs(SELLER), COLLECTIONS.orders, 'order_1')));
     await assertFails(getDoc(doc(dbAs(OTHER_BUYER), COLLECTIONS.orders, 'order_1')));
+  });
+
+  it('D2 CA-3: sellers do not read orders, which may include other sellers items', async () => {
+    const orders = collection(dbAs(SELLER), COLLECTIONS.orders);
+    await assertFails(getDoc(doc(dbAs(SELLER), COLLECTIONS.orders, 'order_1')));
+    await assertFails(getDocs(query(orders, where('sellerIds', 'array-contains', SELLER))));
   });
 });
 

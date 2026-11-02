@@ -1,42 +1,32 @@
-import React, { useMemo, useState } from 'react';
-import { AlertTriangle, Archive, BarChart3, BookOpen, CheckCircle, Clock, Edit3, Plus, Store } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertTriangle, Archive, BookOpen, CheckCircle, Clock, Edit3, Plus, Store } from 'lucide-react';
 
+import { Modal } from '@/components/ui/Modal';
 import { CreateBookModal } from '@/features/seller/CreateBookModal';
+import { SalesStats } from '@/features/seller/SalesStats';
 import { useSellerBooks } from '@/features/seller/useSellerBooks';
+import { useSellerSales } from '@/features/seller/useSellerSales';
 import { Book } from '@/types';
 
 export const SellerDashboard: React.FC = () => {
   const { sellerBooks, saveBook, withdrawBook } = useSellerBooks();
-  const [period, setPeriod] = useState<'7d' | 'month' | 'year' | 'all'>('month');
+  const { sales, isLoading, error } = useSellerSales();
   const [editor, setEditor] = useState<{ book: Book | null } | null>(null);
-
-  const stats = useMemo(() => {
-    let totalSalesCount = 0;
-    let totalRevenue = 0;
-
-    sellerBooks.forEach(book => {
-      const sales = book.salesCount || 0;
-      totalSalesCount += sales;
-      totalRevenue += sales * book.price;
-    });
-
-    const factor = period === '7d' ? 0.25 : period === 'month' ? 0.65 : period === 'year' ? 0.95 : 1.0;
-
-    return {
-      salesCount: Math.round(totalSalesCount * factor),
-      revenue: Number((totalRevenue * factor).toFixed(2)),
-      publishedCount: sellerBooks.filter(book => book.status === 'published').length,
-      pendingCount: sellerBooks.filter(book => book.status === 'pending_review').length,
-      draftCount: sellerBooks.filter(book => book.status === 'draft').length,
-      rejectedCount: sellerBooks.filter(book => book.status === 'rejected').length,
-      withdrawnCount: sellerBooks.filter(book => book.status === 'withdrawn').length,
-    };
-  }, [sellerBooks, period]);
+  const [bookToWithdraw, setBookToWithdraw] = useState<Book | null>(null);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   const handleEdit = (book: Book) => setEditor({ book });
 
   const handleSendDraftForReview = async (book: Book) => {
     await saveBook({ ...book }, true);
+  };
+
+  const confirmWithdraw = async () => {
+    if (!bookToWithdraw) return;
+    setIsWithdrawing(true);
+    await withdrawBook(bookToWithdraw.id);
+    setIsWithdrawing(false);
+    setBookToWithdraw(null);
   };
 
   return (
@@ -63,75 +53,7 @@ export const SellerDashboard: React.FC = () => {
         </button>
       </div>
 
-      <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-2xs space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-emerald-600" />
-            <h2 className="text-base font-bold text-slate-900">Estadísticas de Venta y Facturación</h2>
-          </div>
-
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
-            <button
-              onClick={() => setPeriod('7d')}
-              className={`px-3 py-1 rounded-lg transition-all ${
-                period === '7d' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              Últimos 7 días
-            </button>
-            <button
-              onClick={() => setPeriod('month')}
-              className={`px-3 py-1 rounded-lg transition-all ${
-                period === 'month' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              Este Mes
-            </button>
-            <button
-              onClick={() => setPeriod('year')}
-              className={`px-3 py-1 rounded-lg transition-all ${
-                period === 'year' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              Este Año
-            </button>
-            <button
-              onClick={() => setPeriod('all')}
-              className={`px-3 py-1 rounded-lg transition-all ${
-                period === 'all' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              Histórico Total
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-4 bg-emerald-50/70 border border-emerald-200/60 rounded-2xl space-y-1">
-            <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Ingresos Estimados</span>
-            <p className="text-2xl font-black text-slate-900">${stats.revenue.toFixed(2)}</p>
-            <p className="text-[10px] text-emerald-800/80 font-medium">Facturación del período seleccionado</p>
-          </div>
-
-          <div className="p-4 bg-blue-50/70 border border-blue-200/60 rounded-2xl space-y-1">
-            <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">Ventas Concretadas</span>
-            <p className="text-2xl font-black text-slate-900">{stats.salesCount} u.</p>
-            <p className="text-[10px] text-blue-800/80 font-medium">Ejemplares vendidos</p>
-          </div>
-
-          <div className="p-4 bg-amber-50/70 border border-amber-200/60 rounded-2xl space-y-1">
-            <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">En Revisión</span>
-            <p className="text-2xl font-black text-slate-900">{stats.pendingCount}</p>
-            <p className="text-[10px] text-amber-800/80 font-medium">Esperando aprobación de admin</p>
-          </div>
-
-          <div className="p-4 bg-purple-50/70 border border-purple-200/60 rounded-2xl space-y-1">
-            <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">Activos en Catálogo</span>
-            <p className="text-2xl font-black text-slate-900">{stats.publishedCount}</p>
-            <p className="text-[10px] text-purple-800/80 font-medium">Disponibles para compra pública</p>
-          </div>
-        </div>
-      </div>
+      <SalesStats sales={sales} books={sellerBooks} isLoading={isLoading} error={error} />
 
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden">
         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
@@ -157,7 +79,7 @@ export const SellerDashboard: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600">
+            <table data-testid="books-table" className="w-full text-left text-xs text-slate-600">
               <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-100 font-semibold">
                 <tr>
                   <th className="px-6 py-3.5">Libro</th>
@@ -198,7 +120,7 @@ export const SellerDashboard: React.FC = () => {
 
                         {book.status === 'pending_review' && (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                            <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+                            <Clock className="w-3.5 h-3.5 text-amber-600" />
                             <span>En Revisión Admin</span>
                           </span>
                         )}
@@ -251,6 +173,7 @@ export const SellerDashboard: React.FC = () => {
                         )}
 
                         <button
+                          data-testid={`edit-book-${book.id}`}
                           onClick={() => handleEdit(book)}
                           className="p-1.5 text-slate-600 hover:text-amber-600 hover:bg-slate-100 rounded-lg transition-colors"
                           title="Editar libro propio"
@@ -260,9 +183,11 @@ export const SellerDashboard: React.FC = () => {
 
                         {book.status === 'published' && (
                           <button
-                            onClick={() => withdrawBook(book.id)}
+                            data-testid={`withdraw-book-${book.id}`}
+                            onClick={() => setBookToWithdraw(book)}
                             className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
-                            title="Retirar de la venta (Mantiene acceso a compradores en su biblioteca)"
+                            title="Retirar de la venta"
+                            aria-label={`Retirar de la venta ${book.title}`}
                           >
                             <Archive className="w-4 h-4" />
                           </button>
@@ -278,6 +203,39 @@ export const SellerDashboard: React.FC = () => {
       </div>
 
       {editor && <CreateBookModal bookToEdit={editor.book} onClose={() => setEditor(null)} />}
+
+      {bookToWithdraw && (
+        <Modal onClose={() => !isWithdrawing && setBookToWithdraw(null)} labelledBy="withdraw-title">
+          <div className="space-y-4 p-6">
+            <h3 id="withdraw-title" className="text-base font-bold text-slate-900">
+              ¿Retirar «{bookToWithdraw.title}» de la venta?
+            </h3>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600">
+              <li>Deja de aparecer en el catálogo y nadie más puede comprarlo.</li>
+              <li>Quienes ya lo compraron lo siguen teniendo en su biblioteca y pueden leerlo.</li>
+              <li>Para volver a venderlo, editalo y envialo a revisión.</li>
+            </ul>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isWithdrawing}
+                onClick={() => setBookToWithdraw(null)}
+                className="rounded-xl px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isWithdrawing}
+                onClick={confirmWithdraw}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-50"
+              >
+                {isWithdrawing ? 'Retirando…' : 'Retirar de la venta'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
