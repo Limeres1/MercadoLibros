@@ -1,7 +1,7 @@
 import { Firestore } from 'firebase-admin/firestore';
 
 import { COLLECTIONS, USER_SUBCOLLECTIONS } from '../../src/constants/firestore.js';
-import { paginateReaderText } from '../../src/lib/readerPagination.js';
+import { paginateReaderText, rescalePage } from '../../src/lib/readerPagination.js';
 
 export class ReaderError extends Error {
   constructor(
@@ -11,6 +11,14 @@ export class ReaderError extends Error {
     super(message);
   }
 }
+
+const legacyPageCount = (text: string) =>
+  Math.ceil(
+    text
+      .split(/\n\s*\n/)
+      .map(paragraph => paragraph.trim())
+      .filter(Boolean).length / 2,
+  );
 
 export async function synchronizeReaderPages(db: Firestore, userId: string, bookId: string) {
   const libraryRef = db.collection(COLLECTIONS.users).doc(userId).collection(USER_SUBCOLLECTIONS.library).doc(bookId);
@@ -23,9 +31,21 @@ export async function synchronizeReaderPages(db: Firestore, userId: string, book
     const totalPages = typeof text === 'string' ? paginateReaderText(text).length : 0;
     if (!totalPages) throw new ReaderError('No pudimos cargar el texto completo.', 409);
     const savedPage = library.get('lastReadPage');
-    const lastReadPage = Number.isInteger(savedPage) ? Math.max(0, Math.min(savedPage, totalPages)) : 0;
-    if (library.get('totalPages') !== totalPages || savedPage !== lastReadPage) {
-      transaction.update(libraryRef, { totalPages, lastReadPage });
+    const previousTotal = Number(library.get('totalPages'));
+    const fromTotal = previousTotal === legacyPageCount(text) ? previousTotal : totalPages;
+    const lastReadPage = Number.isInteger(savedPage)
+      ? Math.max(0, Math.min(rescalePage(savedPage, fromTotal, totalPages), totalPages))
+      : 0;
+    if (previousTotal !== totalPages || savedPage !== lastReadPage) {
+      const bookmarks = (library.get('bookmarks') ?? []) as { page: number }[];
+      transaction.update(libraryRef, {
+        totalPages,
+        lastReadPage,
+        bookmarks: bookmarks.map(bookmark => ({
+          ...bookmark,
+          page: Math.max(1, rescalePage(bookmark.page, fromTotal, totalPages)),
+        })),
+      });
     }
     return { totalPages, lastReadPage };
   });
