@@ -140,6 +140,23 @@ describe('SessionProvider', () => {
     expect(screen.getByText('Tu cuenta fue bloqueada. Motivo: Spam')).toBeInTheDocument();
   });
 
+  it('CA-2: rejects login attempt when user is blocked', async () => {
+    firebase.signInWithEmailAndPassword.mockResolvedValue({ user: firebaseUser });
+    firebase.getDoc.mockResolvedValue(
+      existingDoc({ displayName: 'Laura', isBlocked: true, blockReason: 'Infracción grave' }),
+    );
+    renderSession();
+
+    let success = true;
+    await act(async () => {
+      success = await session.loginWithEmail('bloqueada@test.com', 'secreta');
+    });
+
+    expect(success).toBe(false);
+    expect(firebase.signOut).toHaveBeenCalled();
+    expect(screen.getByText('Tu cuenta se encuentra bloqueada. Motivo: Infracción grave')).toBeInTheDocument();
+  });
+
   it('shows a neutral message when resetting the password', async () => {
     firebase.sendPasswordResetEmail.mockRejectedValue({ code: 'auth/user-not-found' });
     renderSession();
