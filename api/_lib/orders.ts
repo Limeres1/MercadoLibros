@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { COLLECTIONS, USER_SUBCOLLECTIONS } from '../../src/constants/firestore.js';
 import { MAX_CART_QUANTITY, SHIPPING_COST } from '../../src/constants/statuses.js';
 import { paginateReaderText } from '../../src/lib/readerPagination.js';
+import { expirePreference, isMercadoPagoEnabled } from './mercadoPago.js';
 
 const linkedCover = (coverUrl: unknown) =>
   typeof coverUrl === 'string' && !coverUrl.startsWith('data:') ? coverUrl : '';
@@ -25,6 +26,23 @@ export interface PendingOrder {
   id: string;
   items: OrderItem[];
   totalAmount: number;
+}
+
+const SUPERSEDED_REASON = 'Reemplazado por un nuevo intento de pago.';
+const PAID_ELSEWHERE_REASON = 'Los libros se pagaron en otro pedido.';
+
+const pendingOrdersOf = (db: Firestore, buyerId: string) =>
+  db.collection(COLLECTIONS.orders).where('buyerId', '==', buyerId).where('status', '==', 'pending');
+
+export async function expirePreferences(preferenceIds: string[]) {
+  if (!isMercadoPagoEnabled()) return;
+  await Promise.all(
+    preferenceIds.map(preferenceId =>
+      expirePreference(preferenceId).catch(error =>
+        console.error(`Could not expire Mercado Pago preference ${preferenceId}`, error),
+      ),
+    ),
+  );
 }
 
 const MIN_ADDRESS_LENGTH = 8;
@@ -109,7 +127,16 @@ export async function createOrderFromCart(
     ...(hasPhysical && shippingLocation ? { shippingLocation } : {}),
   };
   const id = randomUUID();
-  await db.collection(COLLECTIONS.orders).doc(id).set(order);
+  const cancelledAt = order.createdAt;
+  const superseded = await db.runTransaction(async transaction => {
+    const pending = await transaction.get(pendingOrdersOf(db, userId));
+    pending.docs.forEach(previous =>
+      transaction.update(previous.ref, { status: 'cancelled', cancelledAt, cancelReason: SUPERSEDED_REASON }),
+    );
+    transaction.set(db.collection(COLLECTIONS.orders).doc(id), order);
+    return pending.docs.map(previous => previous.get('preferenceId')).filter(Boolean) as string[];
+  });
+  await expirePreferences(superseded);
   return { id, items, totalAmount: order.totalAmount };
 }
 
@@ -129,13 +156,15 @@ export async function applyPaymentOutcome(
   paymentId: string,
 ): Promise<string> {
   const orderRef = db.collection(COLLECTIONS.orders).doc(orderId);
-  return db.runTransaction(async transaction => {
+  let duplicatePreferences: string[] = [];
+  const status = await db.runTransaction(async transaction => {
     const orderSnapshot = await transaction.get(orderRef);
     const order = orderSnapshot.data();
     if (!order) throw new CheckoutError('No encontramos el pedido.');
-    if (order.status !== 'pending' || outcome === 'pending') return order.status as string;
+    if (order.status === 'paid' || outcome === 'pending') return order.status as string;
 
     if (outcome === 'rejected') {
+      if (order.status !== 'pending') return order.status as string;
       transaction.update(orderRef, { status: 'rejected', paymentId });
       return 'rejected';
     }
@@ -146,11 +175,12 @@ export async function applyPaymentOutcome(
     const libraryRefs = items.map(item => userRef.collection(USER_SUBCOLLECTIONS.library).doc(item.bookId));
     const purchaseRefs = items.map(item => userRef.collection(USER_SUBCOLLECTIONS.purchases).doc(item.bookId));
     const contentRefs = items.map(item => db.collection(COLLECTIONS.bookContents).doc(item.bookId));
-    const [books, libraryItems, purchases, contents] = await Promise.all([
+    const [books, libraryItems, purchases, contents, otherPending] = await Promise.all([
       transaction.getAll(...bookRefs),
       transaction.getAll(...libraryRefs),
       transaction.getAll(...purchaseRefs),
       transaction.getAll(...contentRefs),
+      transaction.get(pendingOrdersOf(db, order.buyerId)),
     ]);
 
     const paidAt = new Date().toISOString();
@@ -184,8 +214,24 @@ export async function applyPaymentOutcome(
       transaction.delete(userRef.collection(USER_SUBCOLLECTIONS.cart).doc(item.bookId));
     });
     transaction.update(orderRef, { status: 'paid', paidAt, paymentId });
+
+    const paidBookIds = new Set(items.map(item => item.bookId));
+    const duplicates = otherPending.docs.filter(
+      pending =>
+        pending.id !== orderId && (pending.get('items') as OrderItem[]).some(item => paidBookIds.has(item.bookId)),
+    );
+    duplicates.forEach(duplicate =>
+      transaction.update(duplicate.ref, {
+        status: 'cancelled',
+        cancelledAt: paidAt,
+        cancelReason: PAID_ELSEWHERE_REASON,
+      }),
+    );
+    duplicatePreferences = duplicates.map(duplicate => duplicate.get('preferenceId')).filter(Boolean);
     return 'paid';
   });
+  await expirePreferences(duplicatePreferences);
+  return status;
 }
 
 export const newSimulatedPaymentId = () => `SIM-${randomUUID().slice(0, 8).toUpperCase()}`;

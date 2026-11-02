@@ -23,15 +23,16 @@ export const BOOK_STATUS_TRANSITIONS: Record<
   withdrawn: ['pending_review'],
 };
 
-export const ORDER_STATUSES = ['pending', 'paid', 'rejected'] as const;
+export const ORDER_STATUSES = ['pending', 'paid', 'rejected', 'cancelled'] as const;
 
 export const ORDER_STATUS_TRANSITIONS: Record<
   (typeof ORDER_STATUSES)[number],
   readonly (typeof ORDER_STATUSES)[number][]
 > = {
-  pending: ['paid', 'rejected'],
+  pending: ['paid', 'rejected', 'cancelled'],
   paid: [],
-  rejected: [],
+  rejected: ['paid'],
+  cancelled: ['paid'],
 };
 
 export const REPORT_STATUSES = ['pending', 'resolved', 'dismissed'] as const;

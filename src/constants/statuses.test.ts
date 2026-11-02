@@ -14,9 +14,13 @@ describe('book status transitions', () => {
 });
 
 describe('order status transitions', () => {
-  it('treats paid and rejected as final', () => {
+  it('treats paid as final and still accepts a late approved payment', () => {
     expect(canTransition(ORDER_STATUS_TRANSITIONS, 'pending', 'paid')).toBe(true);
+    expect(canTransition(ORDER_STATUS_TRANSITIONS, 'pending', 'cancelled')).toBe(true);
     expect(canTransition(ORDER_STATUS_TRANSITIONS, 'paid', 'rejected')).toBe(false);
-    expect(canTransition(ORDER_STATUS_TRANSITIONS, 'rejected', 'paid')).toBe(false);
+    expect(canTransition(ORDER_STATUS_TRANSITIONS, 'paid', 'cancelled')).toBe(false);
+    expect(canTransition(ORDER_STATUS_TRANSITIONS, 'rejected', 'paid')).toBe(true);
+    expect(canTransition(ORDER_STATUS_TRANSITIONS, 'cancelled', 'paid')).toBe(true);
+    expect(canTransition(ORDER_STATUS_TRANSITIONS, 'cancelled', 'pending')).toBe(false);
   });
 });

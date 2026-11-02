@@ -26,6 +26,7 @@ const STATUS_BADGES: Record<OrderStatus, { label: string; className: string; ico
   paid: { label: 'Pagado', className: 'bg-emerald-100 text-emerald-800', icon: CheckCircle2 },
   pending: { label: 'Pendiente de pago', className: 'bg-amber-100 text-amber-900', icon: Clock },
   rejected: { label: 'Pago rechazado', className: 'bg-red-100 text-red-800', icon: XCircle },
+  cancelled: { label: 'Cancelado', className: 'bg-slate-100 text-slate-700', icon: XCircle },
 };
 
 const RESULT_MESSAGES: Record<OrderStatus, { title: string; text: string; className: string }> = {
@@ -43,6 +44,11 @@ const RESULT_MESSAGES: Record<OrderStatus, { title: string; text: string; classN
     title: 'El pago fue rechazado',
     text: 'No se cobró nada y los libros siguen en tu carrito. Podés intentar de nuevo con otro medio de pago.',
     className: 'border-red-200 bg-red-50 text-red-900',
+  },
+  cancelled: {
+    title: 'Este intento de pago ya no está activo',
+    text: 'Lo reemplazaste por otro intento o los libros ya se pagaron en otro pedido. No se cobró nada en este.',
+    className: 'border-slate-200 bg-slate-50 text-slate-800',
   },
 };
 
@@ -75,13 +81,14 @@ export const OrdersPage: React.FC = () => {
   if (isLoading && orders.length === 0) return <PageLoader />;
 
   const returnedOrder = orders.find(order => order.id === returnedOrderId);
+  const visibleOrders = orders.filter(order => order.status !== 'cancelled');
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <header>
         <h1 className="font-serif text-3xl font-bold text-slate-900">Mis pedidos</h1>
         <p className="mt-1 text-sm text-slate-500">
-          {orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'}
+          {visibleOrders.length} {visibleOrders.length === 1 ? 'pedido' : 'pedidos'}
         </p>
       </header>
 
@@ -102,7 +109,7 @@ export const OrdersPage: React.FC = () => {
         </p>
       )}
 
-      {orders.length === 0 ? (
+      {visibleOrders.length === 0 ? (
         <EmptyState
           icon={PackageCheck}
           title="Todavía no hiciste ningún pedido"
@@ -118,7 +125,7 @@ export const OrdersPage: React.FC = () => {
         />
       ) : (
         <ul className="space-y-4">
-          {orders.map(order => (
+          {visibleOrders.map(order => (
             <OrderCard
               key={order.id}
               order={order}

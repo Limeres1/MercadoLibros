@@ -51,10 +51,11 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           .sort((first, second) => second.createdAt.localeCompare(first.createdAt));
         const previous = statusesRef.current;
         next.forEach(order => {
-          if (previous?.get(order.id) !== 'pending') return;
+          const before = previous?.get(order.id);
+          if (!before || before === order.status) return;
           if (order.status === 'paid') {
             showToastRef.current('¡Pago aprobado! Tus libros digitales ya están en tu biblioteca.', 'success');
-          } else if (order.status === 'rejected') {
+          } else if (order.status === 'rejected' && before === 'pending') {
             showToastRef.current('El pago fue rechazado. Los libros siguen en tu carrito.', 'error');
           }
         });
