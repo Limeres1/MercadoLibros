@@ -567,8 +567,8 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
         </div>
       )}
 
-      <main ref={contentRef} className="flex-1 overflow-y-auto flex items-center justify-center p-4 sm:p-8">
-        <div className="w-full max-w-2xl mx-auto flex flex-col justify-between min-h-[60vh]">
+      <main ref={contentRef} className="flex-1 overflow-y-auto flex p-4 sm:p-8">
+        <div className="w-full max-w-2xl m-auto flex flex-col justify-between">
           <div
             style={{ fontSize: `${readerSettings.fontSize}px` }}
             className={`${fontClasses} ${lineHeightClasses} space-y-6 text-justify`}

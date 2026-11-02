@@ -6,6 +6,13 @@ import { INITIAL_BOOKS, INITIAL_LIBRARY } from '@/data/initialData';
 import { ReaderPage } from '@/features/reader/ReaderPage';
 import { Book, LibraryItem } from '@/types';
 
+const FILLER = 'texto '.repeat(75).trim();
+const twoPerPage = (text: string) =>
+  text
+    .split('\n\n')
+    .map(paragraph => `${paragraph} ${FILLER}`)
+    .join('\n\n');
+
 const state = vi.hoisted(() => ({
   book: undefined as Book | undefined,
   item: undefined as LibraryItem | undefined,
@@ -105,7 +112,7 @@ describe('bookmark interactions', () => {
   });
 
   it('opens a bookmark page and requests deletion of only that bookmark', async () => {
-    state.text = 'Uno.\n\nDos.\n\nTres.';
+    state.text = twoPerPage('Uno.\n\nDos.\n\nTres.');
     state.item = { ...state.item!, totalPages: 2 };
     state.item = {
       ...state.item!,
@@ -124,7 +131,7 @@ describe('bookmark interactions', () => {
 describe('full text and page navigation', () => {
   it('keeps the chosen page when an older Firestore position arrives, then restores the saved page on reopen', () => {
     state.item = { ...state.item!, lastReadPage: 1, totalPages: 3 };
-    state.text = 'Uno.\n\nDos.\n\nTres.\n\nCuatro.\n\nCinco.';
+    state.text = twoPerPage('Uno.\n\nDos.\n\nTres.\n\nCuatro.\n\nCinco.');
     const view = renderReader();
     fireEvent.click(screen.getByRole('button', { name: 'Página siguiente' }));
     fireEvent.click(screen.getByRole('button', { name: 'Página siguiente' }));
@@ -203,7 +210,7 @@ describe('full text and page navigation', () => {
   });
 
   it('navigates all paragraphs with buttons and slider, respecting the first and last page', () => {
-    state.text = 'Párrafo uno.\n\nPárrafo dos.\n\nPárrafo tres.\n\nPárrafo cuatro.\n\nÚltimo párrafo.';
+    state.text = twoPerPage('Párrafo uno.\n\nPárrafo dos.\n\nPárrafo tres.\n\nPárrafo cuatro.\n\nÚltimo párrafo.');
     state.item = { ...state.item!, totalPages: 3 };
     renderReader();
     const previous = screen.getByRole('button', { name: 'Página anterior' });
@@ -220,7 +227,7 @@ describe('full text and page navigation', () => {
     expect(screen.getByLabelText('Progreso de lectura')).toHaveTextContent('67%');
     expect(state.updateProgress).toHaveBeenLastCalledWith('purchased-book', 2);
     fireEvent.change(slider, { target: { value: '3' } });
-    expect(screen.getByText('Último párrafo.')).toBeInTheDocument();
+    expect(screen.getByText(/Último párrafo\./)).toBeInTheDocument();
     expect(screen.getByLabelText('Progreso de lectura')).toHaveTextContent('100%');
     expect(next).toBeDisabled();
     fireEvent.click(previous);
@@ -228,7 +235,7 @@ describe('full text and page navigation', () => {
   });
 
   it('supports keyboard navigation without turning pages while editing a bookmark', () => {
-    state.text = 'Primero.\n\nSegundo.\n\nTercero.';
+    state.text = twoPerPage('Primero.\n\nSegundo.\n\nTercero.');
     state.item = { ...state.item!, totalPages: 2 };
     renderReader();
     const slider = screen.getByRole('slider', { name: 'Página de lectura' });
