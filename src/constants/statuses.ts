@@ -12,6 +12,20 @@ export const BOOK_CONDITION_LABELS: Record<(typeof BOOK_CONDITIONS)[number], str
 
 export const BOOK_STATUSES = ['draft', 'pending_review', 'published', 'rejected', 'withdrawn'] as const;
 
+export const BOOK_STATUS_LABELS: Record<(typeof BOOK_STATUSES)[number], string> = {
+  draft: 'Borrador',
+  pending_review: 'En revisión',
+  published: 'Publicado',
+  rejected: 'Rechazado',
+  withdrawn: 'Retirado',
+};
+
+export const ACCOUNT_ROLE_LABELS: Record<(typeof ACCOUNT_ROLES)[number], string> = {
+  buyer: 'Comprador',
+  seller: 'Vendedor',
+  admin: 'Administrador',
+};
+
 export const BOOK_STATUS_TRANSITIONS: Record<
   (typeof BOOK_STATUSES)[number],
   readonly (typeof BOOK_STATUSES)[number][]
@@ -49,6 +63,19 @@ export const AUDIT_ACTIONS = [
   'block_user',
   'unblock_user',
 ] as const;
+
+export const AUDIT_ACTION_LABELS: Record<(typeof AUDIT_ACTIONS)[number], string> = {
+  approve_book: 'Aprobó un libro',
+  reject_book: 'Rechazó un libro',
+  withdraw_book: 'Retiró un libro de la venta',
+  delete_review: 'Eliminó una reseña',
+  resolve_report: 'Resolvió una denuncia',
+  dismiss_report: 'Desestimó una denuncia',
+  block_user: 'Bloqueó a un usuario',
+  unblock_user: 'Desbloqueó a un usuario',
+};
+
+export const MODERATION_REASON_LENGTH = { min: 5, max: 500 } as const;
 
 export const READER_THEMES = ['light', 'sepia', 'dark'] as const;
 

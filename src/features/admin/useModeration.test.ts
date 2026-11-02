@@ -1,288 +1,137 @@
+import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useModeration } from '@/features/admin/useModeration';
-import { logAdminAction } from '@/services/auditLog';
-import { Report, UserProfile } from '@/types';
+import { Book, Report } from '@/types';
 
-const mockToast = vi.fn();
-const mockUpdateBook = vi.fn().mockResolvedValue(true);
-const mockSetUserBlocked = vi.fn().mockResolvedValue(true);
-const mockSetReportStatus = vi.fn().mockResolvedValue(true);
-const mockDeleteReview = vi.fn().mockResolvedValue(undefined);
-
-const adminUser: UserProfile = {
-  id: 'admin_1',
-  email: 'admin@test.com',
-  displayName: 'Admin Principal',
-  role: 'admin',
-  createdAt: '2025-01-01',
-};
-
-const regularUser: UserProfile = {
-  id: 'user_regular_1',
-  email: 'usuario@test.com',
-  displayName: 'Usuario Regular',
-  role: 'buyer',
-  isBlocked: false,
-  createdAt: '2025-01-01',
-};
-
-const blockedUser: UserProfile = {
-  id: 'user_blocked_1',
-  email: 'bloqueado@test.com',
-  displayName: 'Usuario Bloqueado',
-  role: 'seller',
-  isBlocked: true,
-  blockReason: 'Spam masivo',
-  createdAt: '2025-01-01',
-};
-
-const bookReport: Report = {
-  id: 'report_book_1',
-  reporterId: 'reporter_1',
-  reporterName: 'Denunciante',
-  targetType: 'book',
-  targetId: 'book_suspect_1',
-  targetTitle: 'Libro Sospechoso',
-  reason: 'Contenido ofensivo',
-  details: 'Incumple las políticas comunitarias',
-  status: 'pending',
-  createdAt: '2025-02-01',
-};
-
-const reviewReport: Report = {
-  id: 'report_review_1',
-  reporterId: 'reporter_1',
-  reporterName: 'Denunciante',
-  targetType: 'review',
-  targetId: 'review_suspect_1',
-  targetTitle: 'Reseña de Odio',
-  reason: 'Lenguaje inapropiado',
-  details: 'Insultos directos',
-  status: 'pending',
-  createdAt: '2025-02-01',
-};
-
-vi.mock('@/components/ui/Toast', () => ({
-  useToast: () => ({ showToast: mockToast }),
+const fake = vi.hoisted(() => ({
+  writes: [] as { type: string; path: string; data?: Record<string, unknown> }[],
+  commit: vi.fn(),
+  showToast: vi.fn(),
+  postApi: vi.fn(),
+  deleteReview: vi.fn(),
 }));
 
+const batch = {
+  update: (ref: { path: string }, data: Record<string, unknown>) =>
+    fake.writes.push({ type: 'update', path: ref.path, data }),
+  set: (ref: { path: string }, data: Record<string, unknown>) =>
+    fake.writes.push({ type: 'set', path: ref.path, data }),
+  delete: (ref: { path: string }) => fake.writes.push({ type: 'delete', path: ref.path }),
+  commit: () => fake.commit(),
+};
+
+vi.mock('firebase/firestore', () => ({
+  writeBatch: () => batch,
+  deleteField: () => 'DELETE',
+  doc: (collection: { path: string }, id: string) => ({ path: `${collection.path}/${id}` }),
+}));
+vi.mock('@/services/firebase', () => ({ db: {} }));
+vi.mock('@/services/firestore', () => ({
+  firestoreRefs: {
+    book: (id: string) => ({ path: `books/${id}` }),
+    reports: () => ({ path: 'reports' }),
+    auditLog: () => ({ path: 'auditLog' }),
+  },
+}));
+vi.mock('@/services/api', () => ({ postApi: fake.postApi }));
+vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ showToast: fake.showToast }) }));
 vi.mock('@/features/auth/SessionProvider', () => ({
-  useSession: () => ({
-    currentUser: adminUser,
-    users: [adminUser, regularUser, blockedUser],
-    setUserBlocked: mockSetUserBlocked,
-  }),
+  useSession: () => ({ currentUser: { id: 'admin-1', displayName: 'Lev', role: 'admin' } }),
 }));
-
-vi.mock('@/features/catalog/BooksProvider', () => ({
-  useBooks: () => ({
-    updateBook: mockUpdateBook,
-  }),
-}));
-
-vi.mock('@/features/catalog/reports/ReportsProvider', () => ({
-  useReports: () => ({
-    reports: [bookReport, reviewReport],
-    setReportStatus: mockSetReportStatus,
-  }),
-}));
-
 vi.mock('@/features/catalog/reviews/reviewsService', () => ({
-  deleteReview: (...args: unknown[]) => mockDeleteReview(...args),
+  deleteReview: (reviewId: string, alsoWrite: (writer: typeof batch) => void) => {
+    fake.deleteReview(reviewId);
+    batch.delete({ path: `reviews/${reviewId}` });
+    alsoWrite(batch);
+    return fake.commit();
+  },
 }));
 
-vi.mock('@/services/auditLog', () => ({
-  logAdminAction: vi.fn().mockResolvedValue(undefined),
-}));
+const book = { id: 'book-1', title: 'Ficciones' } as Book;
+const report = (targetType: Report['targetType']) =>
+  ({ id: 'report-1', targetType, targetId: 'target-1', targetTitle: 'Contenido', reason: 'Spam' }) as Report;
 
-describe('useModeration - RF-31 / RF-32 / RNF-14', () => {
+const auditWrites = () => fake.writes.filter(write => write.path.startsWith('auditLog/')).map(write => write.data);
+
+describe('useModeration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUpdateBook.mockResolvedValue(true);
-    mockSetUserBlocked.mockResolvedValue(true);
-    mockSetReportStatus.mockResolvedValue(true);
-    mockDeleteReview.mockResolvedValue(undefined);
+    fake.writes = [];
+    fake.commit.mockResolvedValue(undefined);
   });
 
-  describe('CA-1: No se puede rechazar sin motivo', () => {
-    it('rejects publication when a valid reason is provided and records auditLog', async () => {
-      const { rejectBook } = useModeration();
+  const moderation = () => renderHook(() => useModeration()).result.current;
 
-      const success = await rejectBook('book_1', 'La portada no cumple con la resolución requerida.');
-
-      expect(success).toBe(true);
-      expect(mockUpdateBook).toHaveBeenCalledWith('book_1', {
-        status: 'rejected',
-        rejectionReason: 'La portada no cumple con la resolución requerida.',
-      });
-      expect(logAdminAction).toHaveBeenCalledWith(
-        adminUser,
-        expect.objectContaining({
-          action: 'reject_book',
-          targetType: 'book',
-          targetId: 'book_1',
-          reason: 'La portada no cumple con la resolución requerida.',
-        }),
-      );
-      expect(mockToast).toHaveBeenCalledWith(expect.stringContaining('Publicación rechazada'), 'info');
+  it('CA-3: approving writes the book and its audit entry in one batch', async () => {
+    await moderation().approveBook(book);
+    expect(fake.commit).toHaveBeenCalledTimes(1);
+    expect(fake.writes[0]).toMatchObject({
+      path: 'books/book-1',
+      data: { status: 'published', rejectionReason: 'DELETE' },
     });
-
-    it('refuses to reject if reason is empty or only whitespace', async () => {
-      const { rejectBook } = useModeration();
-
-      const emptyResult = await rejectBook('book_1', '');
-      expect(emptyResult).toBe(false);
-      expect(mockUpdateBook).not.toHaveBeenCalled();
-      expect(logAdminAction).not.toHaveBeenCalled();
-      expect(mockToast).toHaveBeenCalledWith(expect.stringContaining('Debes ingresar un motivo'), 'error');
-
-      mockToast.mockClear();
-      const whitespaceResult = await rejectBook('book_1', '     ');
-      expect(whitespaceResult).toBe(false);
-      expect(mockUpdateBook).not.toHaveBeenCalled();
-      expect(logAdminAction).not.toHaveBeenCalled();
-      expect(mockToast).toHaveBeenCalledWith(expect.stringContaining('Debes ingresar un motivo'), 'error');
-    });
+    expect(auditWrites()).toEqual([
+      expect.objectContaining({
+        adminId: 'admin-1',
+        adminName: 'Lev',
+        action: 'approve_book',
+        targetId: 'book-1',
+        targetLabel: 'Ficciones',
+        createdAt: expect.any(String),
+      }),
+    ]);
   });
 
-  describe('CA-3: Registro de acciones críticas en auditLog', () => {
-    it('logs approve_book action on book approval', async () => {
-      const { approveBook } = useModeration();
+  it('CA-1/CA-3: rejecting stores the reason on the book and in the audit log', async () => {
+    await moderation().rejectBook(book, 'Falta la sinopsis.');
+    expect(fake.writes[0].data).toMatchObject({ status: 'rejected', rejectionReason: 'Falta la sinopsis.' });
+    expect(auditWrites()[0]).toMatchObject({ action: 'reject_book', reason: 'Falta la sinopsis.' });
+  });
 
-      const success = await approveBook('book_1');
-
-      expect(success).toBe(true);
-      expect(mockUpdateBook).toHaveBeenCalledWith('book_1', {
-        status: 'published',
-        rejectionReason: undefined,
-      });
-      expect(logAdminAction).toHaveBeenCalledWith(
-        adminUser,
-        expect.objectContaining({
-          action: 'approve_book',
-          targetType: 'book',
-          targetId: 'book_1',
-        }),
-      );
+  it('resolving a book report withdraws the book, closes the report and logs both actions', async () => {
+    await moderation().resolveReport(report('book'), 'remove_target', 'Plagio confirmado.');
+    expect(fake.writes.find(write => write.path === 'books/target-1')?.data).toMatchObject({
+      status: 'withdrawn',
+      rejectionReason: 'Plagio confirmado.',
     });
-
-    it('logs withdraw_book action when an admin takes down a book', async () => {
-      const { withdrawBook } = useModeration();
-
-      const success = await withdrawBook('book_1', 'Violación de derechos de autor');
-
-      expect(success).toBe(true);
-      expect(mockUpdateBook).toHaveBeenCalledWith('book_1', {
-        status: 'withdrawn',
-        rejectionReason: 'Violación de derechos de autor',
-      });
-      expect(logAdminAction).toHaveBeenCalledWith(
-        adminUser,
-        expect.objectContaining({
-          action: 'withdraw_book',
-          targetType: 'book',
-          targetId: 'book_1',
-          reason: 'Violación de derechos de autor',
-        }),
-      );
+    expect(fake.writes.find(write => write.path === 'reports/report-1')?.data).toMatchObject({
+      status: 'resolved',
+      adminNote: 'Plagio confirmado.',
+      resolvedBy: 'admin-1',
     });
+    expect(auditWrites().map(entry => entry?.action)).toEqual(['withdraw_book', 'resolve_report']);
+    expect(fake.commit).toHaveBeenCalledTimes(1);
+  });
 
-    it('logs dismiss_report when dismissing a report', async () => {
-      const { resolveReport } = useModeration();
+  it('resolving a review report deletes the review in the same batch as the report and audit', async () => {
+    await moderation().resolveReport(report('review'), 'remove_target', 'Insultos al autor.');
+    expect(fake.deleteReview).toHaveBeenCalledWith('target-1');
+    expect(fake.writes.map(write => write.type)).toEqual(['delete', 'set', 'update', 'set']);
+    expect(auditWrites().map(entry => entry?.action)).toEqual(['delete_review', 'resolve_report']);
+  });
 
-      const success = await resolveReport('report_book_1', 'dismiss');
+  it('dismissing only closes the report and logs it', async () => {
+    await moderation().resolveReport(report('book'), 'dismiss', 'No infringe las normas.');
+    expect(fake.writes.some(write => write.path.startsWith('books/'))).toBe(false);
+    expect(auditWrites()[0]).toMatchObject({ action: 'dismiss_report', reason: 'No infringe las normas.' });
+  });
 
-      expect(success).toBe(true);
-      expect(mockSetReportStatus).toHaveBeenCalledWith('report_book_1', 'dismissed', expect.any(String));
-      expect(logAdminAction).toHaveBeenCalledWith(
-        adminUser,
-        expect.objectContaining({
-          action: 'dismiss_report',
-          targetType: 'report',
-          targetId: 'report_book_1',
-        }),
-      );
-    });
+  it('shows the error and reports failure when the batch is rejected', async () => {
+    fake.commit.mockRejectedValue({ code: 'permission-denied' });
+    expect(await moderation().approveBook(book)).toBe(false);
+    expect(fake.showToast).toHaveBeenCalledWith(expect.any(String), 'error');
+  });
 
-    it('withdraws book and logs resolve_report when removing a reported book', async () => {
-      const { resolveReport } = useModeration();
-
-      const success = await resolveReport('report_book_1', 'remove_target', 'Retirado por infracción');
-
-      expect(success).toBe(true);
-      expect(mockUpdateBook).toHaveBeenCalledWith('book_suspect_1', expect.objectContaining({ status: 'withdrawn' }));
-      expect(mockSetReportStatus).toHaveBeenCalledWith('report_book_1', 'resolved', 'Retirado por infracción');
-      expect(logAdminAction).toHaveBeenCalledWith(
-        adminUser,
-        expect.objectContaining({
-          action: 'resolve_report',
-          targetType: 'report',
-          targetId: 'report_book_1',
-        }),
-      );
-    });
-
-    it('deletes review and logs resolve_report when removing a reported review', async () => {
-      const { resolveReport } = useModeration();
-
-      const success = await resolveReport('report_review_1', 'remove_target', 'Reseña ofensiva eliminada');
-
-      expect(success).toBe(true);
-      expect(mockDeleteReview).toHaveBeenCalledWith('review_suspect_1');
-      expect(mockSetReportStatus).toHaveBeenCalledWith('report_review_1', 'resolved', 'Reseña ofensiva eliminada');
-      expect(logAdminAction).toHaveBeenCalledWith(
-        adminUser,
-        expect.objectContaining({
-          action: 'delete_review',
-          targetType: 'review',
-          targetId: 'review_suspect_1',
-        }),
-      );
-      expect(logAdminAction).toHaveBeenCalledWith(
-        adminUser,
-        expect.objectContaining({
-          action: 'resolve_report',
-          targetType: 'report',
-          targetId: 'report_review_1',
-        }),
-      );
-    });
-
-    it('blocks user with motive and logs block_user action', async () => {
-      const { toggleBlockUser } = useModeration();
-
-      const success = await toggleBlockUser('user_regular_1', 'Intento de fraude reiterado');
-
-      expect(success).toBe(true);
-      expect(mockSetUserBlocked).toHaveBeenCalledWith('user_regular_1', true, 'Intento de fraude reiterado');
-      expect(logAdminAction).toHaveBeenCalledWith(
-        adminUser,
-        expect.objectContaining({
-          action: 'block_user',
-          targetType: 'user',
-          targetId: 'user_regular_1',
-          reason: 'Intento de fraude reiterado',
-        }),
-      );
-    });
-
-    it('unblocks user and logs unblock_user action', async () => {
-      const { toggleBlockUser } = useModeration();
-
-      const success = await toggleBlockUser('user_blocked_1', 'Apelación aprobada');
-
-      expect(success).toBe(true);
-      expect(mockSetUserBlocked).toHaveBeenCalledWith('user_blocked_1', false, 'Apelación aprobada');
-      expect(logAdminAction).toHaveBeenCalledWith(
-        adminUser,
-        expect.objectContaining({
-          action: 'unblock_user',
-          targetType: 'user',
-          targetId: 'user_blocked_1',
-          reason: 'Apelación aprobada',
-        }),
-      );
+  it('blocks through the server function', async () => {
+    fake.postApi.mockResolvedValue({ blocked: true });
+    const user = { id: 'buyer-1', displayName: 'Renata' } as Parameters<
+      ReturnType<typeof useModeration>['setUserBlocked']
+    >[0];
+    expect(await moderation().setUserBlocked(user, true, 'Fraude reiterado')).toBe(true);
+    expect(fake.postApi).toHaveBeenCalledWith('/api/admin/block', {
+      userId: 'buyer-1',
+      blocked: true,
+      reason: 'Fraude reiterado',
     });
   });
 });

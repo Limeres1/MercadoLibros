@@ -80,7 +80,7 @@ service cloud.firestore {
         && incoming().email == request.auth.token.email
         && !('password' in incoming())
         && isValidProfile(incoming());
-      allow update: if isAdmin()
+      allow update: if (isAdmin() && !changed().hasAny(['isBlocked', 'blockReason']))
         || (isSelf(userId)
           && !changed().hasAny(['role', 'email', 'isBlocked', 'blockReason', 'createdAt'])
           && isValidProfile(incoming()));
@@ -143,6 +143,12 @@ service cloud.firestore {
         && (!('keywords' in data) || (data.keywords is list && data.keywords.size() <= 8));
     }
 
+    function hasModerationReason() {
+      return !changed().hasAny(['status'])
+        || incoming().status in ['draft', 'pending_review', 'published']
+        || isText(incoming().rejectionReason, 5, 500);
+    }
+
     function hasReviewed(bookId) {
       return exists(/databases/$(database)/documents/reviews/$(bookId + '_' + request.auth.uid))
         || existsAfter(/databases/$(database)/documents/reviews/$(bookId + '_' + request.auth.uid));
@@ -171,7 +177,7 @@ service cloud.firestore {
         && incoming().reviewCount == 0
         && incoming().salesCount == 0
         && isValidBook(incoming());
-      allow update: if isAdmin()
+      allow update: if (isAdmin() && hasModerationReason())
         || (isActiveSeller()
           && resource.data.sellerId == request.auth.uid
           && !changed().hasAny(['sellerId', 'rating', 'reviewCount', 'salesCount', 'createdAt', 'rejectionReason'])
@@ -249,7 +255,12 @@ service cloud.firestore {
     match /auditLog/{entryId} {
       allow read: if isAdmin();
       allow create: if isAdmin()
+        && incoming().keys().hasOnly(['id', 'adminId', 'adminName', 'action', 'targetType', 'targetId', 'targetLabel', 'reason', 'createdAt'])
+        && incoming().id == entryId
         && incoming().adminId == request.auth.uid
+        && isText(incoming().adminName, 1, 120)
+        && isText(incoming().targetLabel, 0, 300)
+        && (incoming().action == 'approve_book' || isText(incoming().reason, 5, 500))
         && incoming().action in [
           'approve_book', 'reject_book', 'withdraw_book', 'delete_review',
           'resolve_report', 'dismiss_report', 'block_user', 'unblock_user'

@@ -152,6 +152,12 @@ export const SellerDashboard: React.FC = () => {
                             <span>Retirado de venta</span>
                           </span>
                         )}
+
+                        {book.status === 'withdrawn' && book.rejectionReason && (
+                          <p className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                            <strong>Motivo:</strong> {book.rejectionReason}
+                          </p>
+                        )}
                       </div>
                     </td>
 

@@ -1,135 +1,152 @@
+import { deleteField, doc, WriteBatch, writeBatch } from 'firebase/firestore';
+
 import { useToast } from '@/components/ui/Toast';
+import { API_ROUTES } from '@/constants/api';
 import { useSession } from '@/features/auth/SessionProvider';
-import { useBooks } from '@/features/catalog/BooksProvider';
-import { useReports } from '@/features/catalog/reports/ReportsProvider';
 import { deleteReview } from '@/features/catalog/reviews/reviewsService';
 import { getErrorMessage } from '@/lib/errors';
-import { logAdminAction } from '@/services/auditLog';
+import { postApi } from '@/services/api';
+import { addAuditEntry } from '@/services/auditLog';
+import { db } from '@/services/firebase';
+import { firestoreRefs } from '@/services/firestore';
+import { Book, Report, UserProfile } from '@/types';
+
+export type ReportResolution = 'dismiss' | 'remove_target';
 
 export function useModeration() {
-  const { currentUser, users, setUserBlocked } = useSession();
-  const { updateBook } = useBooks();
-  const { reports, setReportStatus } = useReports();
+  const { currentUser } = useSession();
   const { showToast } = useToast();
 
-  const recordAudit = async (event: Parameters<typeof logAdminAction>[1]) => {
-    if (currentUser && currentUser.role === 'admin') {
-      try {
-        await logAdminAction(currentUser, event);
-      } catch (error) {
-        console.warn('Error al registrar auditoría:', error);
-      }
-    }
-  };
-
-  const approveBook = async (bookId: string, reason?: string) => {
-    if (!(await updateBook(bookId, { status: 'published', rejectionReason: undefined }))) return false;
-    await recordAudit({
-      action: 'approve_book',
-      targetType: 'book',
-      targetId: bookId,
-      reason: reason || 'Publicación aprobada para catálogo público',
-    });
-    showToast('Publicación aprobada. El libro ya está visible en el catálogo general.', 'success');
-    return true;
-  };
-
-  const rejectBook = async (bookId: string, reason: string) => {
-    const trimmedReason = reason?.trim();
-    if (!trimmedReason) {
-      showToast('Debes ingresar un motivo para rechazar la publicación.', 'error');
+  const run = async (task: () => Promise<void>, success: string, tone: 'success' | 'info' = 'success') => {
+    try {
+      await task();
+      showToast(success, tone);
+      return true;
+    } catch (error) {
+      showToast(getErrorMessage(error), 'error');
       return false;
     }
-    if (!(await updateBook(bookId, { status: 'rejected', rejectionReason: trimmedReason }))) return false;
-    await recordAudit({
-      action: 'reject_book',
-      targetType: 'book',
-      targetId: bookId,
-      reason: trimmedReason,
-    });
-    showToast('Publicación rechazada y devuelta al vendedor con el motivo indicado.', 'info');
-    return true;
   };
 
-  const withdrawBook = async (bookId: string, reason?: string) => {
-    const fallbackReason = reason?.trim() || 'Retirado por el administrador por incumplimiento de normativas.';
-    const withdrawn = await updateBook(bookId, {
-      status: 'withdrawn',
-      rejectionReason: fallbackReason,
+  const asAdmin = (write: (batch: WriteBatch, admin: UserProfile) => void) => async () => {
+    if (!currentUser) throw new Error('Iniciá sesión como administrador.');
+    const batch = writeBatch(db);
+    write(batch, currentUser);
+    await batch.commit();
+  };
+
+  const setBookStatus = (batch: WriteBatch, bookId: string, status: Book['status'], reason?: string) =>
+    batch.update(firestoreRefs.book(bookId), {
+      status,
+      rejectionReason: reason ?? deleteField(),
+      updatedAt: new Date().toISOString(),
     });
-    if (withdrawn) {
-      await recordAudit({
-        action: 'withdraw_book',
-        targetType: 'book',
-        targetId: bookId,
-        reason: fallbackReason,
+
+  const approveBook = (book: Book) =>
+    run(
+      asAdmin((batch, admin) => {
+        setBookStatus(batch, book.id, 'published');
+        addAuditEntry(batch, admin, {
+          action: 'approve_book',
+          targetType: 'book',
+          targetId: book.id,
+          targetLabel: book.title,
+        });
+      }),
+      'Publicación aprobada. El libro ya está en el catálogo.',
+    );
+
+  const rejectBook = (book: Book, reason: string) =>
+    run(
+      asAdmin((batch, admin) => {
+        setBookStatus(batch, book.id, 'rejected', reason);
+        addAuditEntry(batch, admin, {
+          action: 'reject_book',
+          targetType: 'book',
+          targetId: book.id,
+          targetLabel: book.title,
+          reason,
+        });
+      }),
+      'Publicación rechazada. El vendedor ve el motivo en su panel.',
+      'info',
+    );
+
+  const withdrawBook = (book: Book, reason: string) =>
+    run(
+      asAdmin((batch, admin) => {
+        setBookStatus(batch, book.id, 'withdrawn', reason);
+        addAuditEntry(batch, admin, {
+          action: 'withdraw_book',
+          targetType: 'book',
+          targetId: book.id,
+          targetLabel: book.title,
+          reason,
+        });
+      }),
+      'Libro retirado de la venta. Quienes lo compraron lo conservan.',
+      'info',
+    );
+
+  const resolveReport = (report: Report, resolution: ReportResolution, note: string) => {
+    const closeReport = (batch: WriteBatch, admin: UserProfile) => {
+      batch.update(doc(firestoreRefs.reports(), report.id), {
+        status: resolution === 'dismiss' ? 'dismissed' : 'resolved',
+        adminNote: note,
+        resolvedBy: admin.id,
+        resolvedAt: new Date().toISOString(),
       });
-      showToast('Libro retirado de la venta por administración.', 'info');
-    }
-    return withdrawn;
-  };
+      addAuditEntry(batch, admin, {
+        action: resolution === 'dismiss' ? 'dismiss_report' : 'resolve_report',
+        targetType: 'report',
+        targetId: report.id,
+        targetLabel: `${report.reason}: ${report.targetTitle}`,
+        reason: note,
+      });
+    };
 
-  const resolveReport = async (reportId: string, action: 'dismiss' | 'remove_target', adminNote?: string) => {
-    const report = reports.find(candidate => candidate.id === reportId);
-    if (!report) return false;
+    if (resolution === 'dismiss') return run(asAdmin(closeReport), 'Denuncia desestimada.');
 
-    if (action === 'remove_target') {
-      if (report.targetType === 'book') {
-        if (!(await withdrawBook(report.targetId, adminNote || 'Retirado a raíz de denuncia comunitaria')))
-          return false;
-      } else {
-        try {
-          await deleteReview(report.targetId);
-          await recordAudit({
+    if (report.targetType === 'review') {
+      return run(async () => {
+        const admin = currentUser;
+        if (!admin) throw new Error('Iniciá sesión como administrador.');
+        await deleteReview(report.targetId, batch => {
+          addAuditEntry(batch, admin, {
             action: 'delete_review',
             targetType: 'review',
             targetId: report.targetId,
-            reason: adminNote || 'Reseña eliminada tras reporte comunitario',
+            targetLabel: report.targetTitle,
+            reason: note,
           });
-        } catch (error) {
-          showToast(getErrorMessage(error), 'error');
-          return false;
-        }
-      }
+          closeReport(batch, admin);
+        });
+      }, 'Reseña eliminada y denuncia resuelta.');
     }
 
-    const resolutionReason =
-      adminNote || (action === 'dismiss' ? 'Desestimada por falta de pruebas' : 'Contenido retirado por infracción');
-
-    const updated = await setReportStatus(reportId, action === 'dismiss' ? 'dismissed' : 'resolved', resolutionReason);
-    if (!updated) return false;
-
-    await recordAudit({
-      action: action === 'dismiss' ? 'dismiss_report' : 'resolve_report',
-      targetType: 'report',
-      targetId: reportId,
-      reason: resolutionReason,
-    });
-
-    showToast(`Denuncia procesada: ${action === 'dismiss' ? 'Desestimada' : 'Contenido dado de baja'}`, 'success');
-    return true;
+    return run(
+      asAdmin((batch, admin) => {
+        setBookStatus(batch, report.targetId, 'withdrawn', note);
+        addAuditEntry(batch, admin, {
+          action: 'withdraw_book',
+          targetType: 'book',
+          targetId: report.targetId,
+          targetLabel: report.targetTitle,
+          reason: note,
+        });
+        closeReport(batch, admin);
+      }),
+      'Libro retirado de la venta y denuncia resuelta.',
+    );
   };
 
-  const toggleBlockUser = async (userId: string, reason?: string) => {
-    const user = users.find(candidate => candidate.id === userId);
-    if (!user) return false;
+  const setUserBlocked = (user: UserProfile, blocked: boolean, reason: string) =>
+    run(
+      () => postApi(API_ROUTES.adminBlockUser, { userId: user.id, blocked, reason }).then(() => undefined),
+      blocked
+        ? `${user.displayName} quedó bloqueado y ya no puede iniciar sesión.`
+        : `${user.displayName} puede volver a usar su cuenta.`,
+    );
 
-    const willBlock = !user.isBlocked;
-    const trimmedReason =
-      reason?.trim() || (willBlock ? 'Infracción de normas' : 'Cuenta rehabilitada por administración');
-
-    if (await setUserBlocked(userId, willBlock, trimmedReason)) {
-      await recordAudit({
-        action: willBlock ? 'block_user' : 'unblock_user',
-        targetType: 'user',
-        targetId: userId,
-        reason: trimmedReason,
-      });
-      showToast(willBlock ? 'Usuario bloqueado correctamente.' : 'Usuario desbloqueado con éxito.', 'success');
-      return true;
-    }
-    return false;
-  };
-
-  return { approveBook, rejectBook, withdrawBook, resolveReport, toggleBlockUser };
+  return { approveBook, rejectBook, withdrawBook, resolveReport, setUserBlocked };
 }

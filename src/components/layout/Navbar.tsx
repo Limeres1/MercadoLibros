@@ -26,9 +26,11 @@ import { useReports } from '@/features/catalog/reports/ReportsProvider';
 import { useCart } from '@/features/shop/CartProvider';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 relative ${
+  `px-2.5 py-2 rounded-lg transition-colors flex items-center gap-1.5 relative whitespace-nowrap ${
     isActive ? 'text-amber-700 bg-amber-50 font-semibold' : 'hover:text-slate-900 hover:bg-slate-100'
   }`;
+
+const NAV_LABEL_CLASS = 'sr-only min-[1360px]:not-sr-only';
 
 const menuItemClass = 'w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2.5';
 
@@ -74,7 +76,7 @@ export const Navbar: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-2 sm:gap-3">
           <Link to={ROUTES.home} className="flex items-center gap-2.5 group shrink-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-amber-600 to-amber-700 flex items-center justify-center text-white shadow-md shadow-amber-600/20 group-hover:scale-105 transition-transform">
@@ -84,19 +86,19 @@ export const Navbar: React.FC = () => {
               <span className="font-extrabold text-lg sm:text-xl tracking-tight text-slate-900 group-hover:text-amber-700 transition-colors">
                 Mercado <span className="text-amber-600">Libros</span>
               </span>
-              <p className="text-[10px] text-slate-500 tracking-wider uppercase font-semibold hidden sm:block">
+              <p className="text-[10px] text-slate-500 tracking-wider uppercase font-semibold hidden sm:block lg:hidden 2xl:block">
                 Ecosistema Digital de Lectura
               </p>
             </div>
           </Link>
 
-          <div className="flex-1 max-w-lg mx-2 hidden md:block">
+          <div className="flex-1 min-w-[13rem] max-w-lg hidden md:block">
             <div className="relative flex items-center">
               <Search className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" aria-hidden="true" />
               <input
                 type="search"
                 aria-label="Buscar libros"
-                placeholder="Buscar por título, autor o ISBN..."
+                placeholder="Título, autor o ISBN"
                 value={searchQuery}
                 onChange={event => handleSearch(event.target.value)}
                 className="w-full pl-10 pr-24 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-full text-sm text-slate-800 transition-all outline-none"
@@ -112,55 +114,49 @@ export const Navbar: React.FC = () => {
             </div>
           </div>
 
-          <nav className="hidden lg:flex items-center gap-1 text-sm font-medium text-slate-700" aria-label="Principal">
-            <NavLink to={ROUTES.home} end className={navLinkClass}>
+          <nav
+            className="hidden lg:flex items-center gap-0.5 shrink-0 text-sm font-medium text-slate-700"
+            aria-label="Principal"
+          >
+            <NavLink to={ROUTES.home} end className={navLinkClass} title="Catálogo">
               <BookMarked className="w-4 h-4" aria-hidden="true" />
-              <span>Catálogo</span>
+              <span className={NAV_LABEL_CLASS}>Catálogo</span>
             </NavLink>
 
             {currentUser && (
               <>
-                <NavLink to={ROUTES.library} className={navLinkClass}>
+                <NavLink to={ROUTES.library} className={navLinkClass} title="Mi biblioteca">
                   <Library className="w-4 h-4" aria-hidden="true" />
-                  <span>Mi Biblioteca</span>
+                  <span className={NAV_LABEL_CLASS}>Biblioteca</span>
                 </NavLink>
-                <NavLink to={ROUTES.orders} className={navLinkClass}>
+                <NavLink to={ROUTES.orders} className={navLinkClass} title="Mis pedidos">
                   <PackageCheck className="w-4 h-4" aria-hidden="true" />
-                  <span>Mis Pedidos</span>
+                  <span className={NAV_LABEL_CLASS}>Pedidos</span>
                 </NavLink>
               </>
             )}
 
             {isSellerOrAdmin && (
-              <NavLink to={ROUTES.seller} className={navLinkClass}>
+              <NavLink to={ROUTES.seller} className={navLinkClass} title="Panel de vendedor">
                 <Store className="w-4 h-4 text-emerald-600" aria-hidden="true" />
-                <span>Panel Vendedor</span>
+                <span className={NAV_LABEL_CLASS}>Vender</span>
               </NavLink>
             )}
 
             {currentRole === 'admin' && (
-              <NavLink to={ROUTES.admin} className={navLinkClass}>
+              <NavLink to={ROUTES.admin} className={navLinkClass} title="Administración">
                 <ShieldCheck className="w-4 h-4 text-red-600" aria-hidden="true" />
-                <span>Administración</span>
+                <span className={NAV_LABEL_CLASS}>Admin</span>
                 {pendingReportsCount > 0 && (
-                  <span
-                    className="w-2 h-2 rounded-full bg-red-500 absolute top-1.5 right-1 animate-ping"
-                    aria-label="Denuncias pendientes"
-                  ></span>
+                  <span className="w-2 h-2 rounded-full bg-red-500 absolute top-1.5 right-1">
+                    <span className="sr-only">Denuncias pendientes</span>
+                  </span>
                 )}
               </NavLink>
             )}
           </nav>
 
-          <div className="flex items-center gap-1 sm:gap-2">
-            <button
-              onClick={() => setIsScannerOpen(true)}
-              className="p-2 text-slate-600 hover:text-amber-600 hover:bg-slate-100 rounded-lg md:hidden transition-colors"
-              aria-label="Escanear código de barras"
-            >
-              <ScanBarcode className="w-5 h-5" aria-hidden="true" />
-            </button>
-
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             <NavLink
               to={ROUTES.favorites}
               className={({ isActive }) =>
@@ -210,7 +206,7 @@ export const Navbar: React.FC = () => {
                     alt=""
                     className="w-7 h-7 rounded-full object-cover ring-2 ring-amber-500/30"
                   />
-                  <span className="text-xs font-semibold text-slate-800 max-w-[100px] truncate hidden sm:inline">
+                  <span className="text-xs font-semibold text-slate-800 max-w-[96px] truncate hidden sm:max-lg:inline min-[1360px]:inline">
                     {currentUser.displayName.split(' ')[0]}
                   </span>
                   <ChevronDown className="w-3.5 h-3.5 text-slate-400 mr-1" aria-hidden="true" />
@@ -305,8 +301,16 @@ export const Navbar: React.FC = () => {
               placeholder="Buscar título, autor o ISBN..."
               value={searchQuery}
               onChange={event => handleSearch(event.target.value)}
-              className="w-full pl-9 pr-10 py-1.5 bg-slate-100 focus:bg-white border border-slate-200 rounded-full text-sm text-slate-800 outline-none"
+              className="w-full pl-9 pr-20 py-1.5 bg-slate-100 focus:bg-white border border-slate-200 rounded-full text-sm text-slate-800 outline-none"
             />
+            <button
+              onClick={() => setIsScannerOpen(true)}
+              className="absolute right-1 flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-full shadow-2xs"
+              aria-label="Escanear código de barras o ISBN"
+            >
+              <ScanBarcode className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
+              <span>ISBN</span>
+            </button>
           </div>
         </div>
       </div>
