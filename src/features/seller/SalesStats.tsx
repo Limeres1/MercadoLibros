@@ -10,11 +10,10 @@ import {
   SalesPeriod,
 } from '@/features/seller/sellerStats';
 import { formatDate, formatPrice } from '@/lib/format';
-import { Book, Order } from '@/types';
+import { Book, SellerSale } from '@/types';
 
 interface SalesStatsProps {
-  sellerId: string;
-  orders: Order[];
+  sales: SellerSale[];
   books: Book[];
   isLoading: boolean;
   error: string | null;
@@ -25,7 +24,7 @@ const PRESET_PERIODS = Object.keys(SALES_PERIOD_LABELS) as Exclude<SalesPeriod, 
 const DATE_INPUT_CLASS =
   'rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 outline-none focus:border-emerald-500';
 
-export const SalesStats: React.FC<SalesStatsProps> = ({ sellerId, orders, books, isLoading, error }) => {
+export const SalesStats: React.FC<SalesStatsProps> = ({ sales, books, isLoading, error }) => {
   const fieldId = useId();
   const [period, setPeriod] = useState<SalesPeriod>(SALES_PERIODS.all);
   const [startDate, setStartDate] = useState('');
@@ -33,8 +32,8 @@ export const SalesStats: React.FC<SalesStatsProps> = ({ sellerId, orders, books,
 
   const dateError = period === SALES_PERIODS.custom ? rangeError(startDate, endDate) : null;
   const stats = useMemo(
-    () => calculateSellerStats(orders, sellerId, periodRange(period, startDate, endDate)),
-    [orders, sellerId, period, startDate, endDate],
+    () => calculateSellerStats(sales, periodRange(period, startDate, endDate)),
+    [sales, period, startDate, endDate],
   );
 
   const selectPreset = (preset: SalesPeriod) => {
@@ -165,7 +164,7 @@ export const SalesStats: React.FC<SalesStatsProps> = ({ sellerId, orders, books,
             </p>
           ) : stats.sales.length === 0 ? (
             <p className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-center text-xs text-slate-500">
-              {orders.length === 0
+              {sales.length === 0
                 ? 'Todavía no tenés ventas. Cuando alguien pague un libro tuyo, aparece acá.'
                 : 'No hay ventas pagadas en este período. Probá con otro rango de fechas.'}
             </p>

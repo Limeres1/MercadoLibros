@@ -2,12 +2,12 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SellerDashboard } from '@/features/seller/SellerDashboard';
-import { Book, Order } from '@/types';
+import { Book, SellerSale } from '@/types';
 
 const fake = vi.hoisted(() => ({
   withdrawBook: vi.fn(),
   saveBook: vi.fn(),
-  orders: { orders: [] as Order[], isLoading: false, error: null as string | null },
+  sales: { sales: [] as SellerSale[], isLoading: false, error: null as string | null },
 }));
 
 const book = (id: string, status: Book['status']): Book => ({
@@ -34,36 +34,16 @@ const book = (id: string, status: Book['status']): Book => ({
   updatedAt: '2026-01-01',
 });
 
-const paidOrder = (id: string, paidAt: string, sellerId: string, price: number): Order => ({
-  id,
-  buyerId: 'buyer',
-  buyerName: 'Renata Ortiz',
-  buyerEmail: 'renata@test.com',
-  items: [
-    {
-      bookId: `${id}-book`,
-      title: `Vendido ${id}`,
-      author: 'A',
-      sellerId,
-      price,
-      quantity: 1,
-      coverUrl: '',
-      condition: 'nuevo',
-    },
-  ],
-  sellerIds: [sellerId],
-  subtotal: price,
-  shippingCost: 0,
-  totalAmount: price,
-  paymentMethod: 'Mercado Pago',
-  status: 'paid',
-  createdAt: paidAt,
+const sale = (orderId: string, paidAt: string, price: number): SellerSale => ({
+  orderId,
   paidAt,
+  bookId: `${orderId}-book`,
+  title: `Vendido ${orderId}`,
+  quantity: 1,
+  price,
+  buyerName: 'Renata Ortiz',
 });
 
-vi.mock('@/features/auth/SessionProvider', () => ({
-  useSession: () => ({ currentUser: { id: 'seller-1', displayName: 'Tinta Sur', role: 'seller' } }),
-}));
 vi.mock('@/features/seller/useSellerBooks', () => ({
   useSellerBooks: () => ({
     sellerBooks: [book('published', 'published'), book('review', 'pending_review')],
@@ -71,17 +51,14 @@ vi.mock('@/features/seller/useSellerBooks', () => ({
     withdrawBook: fake.withdrawBook,
   }),
 }));
-vi.mock('@/features/seller/useSellerOrders', () => ({ useSellerOrders: () => fake.orders }));
+vi.mock('@/features/seller/useSellerSales', () => ({ useSellerSales: () => fake.sales }));
 vi.mock('@/features/seller/CreateBookModal', () => ({ CreateBookModal: () => null }));
 
 describe('SellerDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    fake.orders = {
-      orders: [
-        paidOrder('ord_1', '2026-10-21T21:27:54.000Z', 'seller-1', 20),
-        paidOrder('ord_2', '2026-05-02T12:00:00.000Z', 'seller-1', 12.5),
-      ],
+    fake.sales = {
+      sales: [sale('ord_1', '2026-10-21T21:27:54.000Z', 20), sale('ord_2', '2026-05-02T12:00:00.000Z', 12.5)],
       isLoading: false,
       error: null,
     };
@@ -113,20 +90,20 @@ describe('SellerDashboard', () => {
   });
 
   it('does not invent figures while loading or when the orders cannot be read', () => {
-    fake.orders = { orders: [], isLoading: true, error: null };
+    fake.sales = { sales: [], isLoading: true, error: null };
     const { unmount } = render(<SellerDashboard />);
     expect(screen.getByText('Cargando tus ventas…')).toBeInTheDocument();
     expect(screen.getByTestId('stat-revenue')).toHaveTextContent('—');
     unmount();
 
-    fake.orders = { orders: [], isLoading: false, error: 'No pudimos cargar tus ventas.' };
+    fake.sales = { sales: [], isLoading: false, error: 'No pudimos cargar tus ventas.' };
     render(<SellerDashboard />);
     expect(screen.getByRole('alert')).toHaveTextContent('No pudimos cargar tus ventas.');
     expect(screen.queryByTestId('stat-revenue')).not.toBeInTheDocument();
   });
 
   it('shows a clear empty state for a seller without sales', () => {
-    fake.orders = { orders: [], isLoading: false, error: null };
+    fake.sales = { sales: [], isLoading: false, error: null };
     render(<SellerDashboard />);
     expect(screen.getByTestId('stat-revenue')).toHaveTextContent('$0.00');
     expect(screen.getByText(/Todavía no tenés ventas/)).toBeInTheDocument();

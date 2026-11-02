@@ -108,6 +108,16 @@ export interface OrderItem {
   condition: BookCondition;
 }
 
+export interface SellerSale {
+  orderId: string;
+  paidAt: string;
+  bookId: string;
+  title: string;
+  quantity: number;
+  price: number;
+  buyerName: string;
+}
+
 export interface Order {
   id: string;
   buyerId: string;

@@ -1,4 +1,4 @@
-import { Order } from '@/types';
+import { SellerSale } from '@/types';
 
 export const SALES_PERIODS = {
   all: 'all',
@@ -22,22 +22,15 @@ export interface DateRange {
   to: number | null;
 }
 
-export interface SellerSale {
-  orderId: string;
-  paidAt: string;
-  bookId: string;
-  title: string;
-  quantity: number;
-  price: number;
+export interface SellerSaleLine extends SellerSale {
   subtotal: number;
-  buyerName: string;
 }
 
 export interface SellerStats {
   salesCount: number;
   orderCount: number;
   revenue: number;
-  sales: SellerSale[];
+  sales: SellerSaleLine[];
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -80,38 +73,24 @@ export function periodRange(period: SalesPeriod, startDate = '', endDate = '', n
 
 const toCents = (amount: number) => Math.round(amount * 100);
 
-export function calculateSellerStats(orders: Order[], sellerId: string, range: DateRange): SellerStats {
-  const sales: SellerSale[] = [];
+export function calculateSellerStats(sales: SellerSale[], range: DateRange): SellerStats {
+  const lines: SellerSaleLine[] = [];
   const orderIds = new Set<string>();
   let revenueCents = 0;
   let salesCount = 0;
 
-  for (const order of orders) {
-    if (order.status !== 'paid' || !order.paidAt) continue;
-    const paidTime = new Date(order.paidAt).getTime();
+  for (const sale of sales) {
+    const paidTime = new Date(sale.paidAt).getTime();
     if (Number.isNaN(paidTime)) continue;
     if (range.from !== null && paidTime < range.from) continue;
     if (range.to !== null && paidTime >= range.to) continue;
-
-    for (const item of order.items) {
-      if (item.sellerId !== sellerId) continue;
-      const subtotalCents = toCents(item.price) * item.quantity;
-      revenueCents += subtotalCents;
-      salesCount += item.quantity;
-      orderIds.add(order.id);
-      sales.push({
-        orderId: order.id,
-        paidAt: order.paidAt,
-        bookId: item.bookId,
-        title: item.title,
-        quantity: item.quantity,
-        price: item.price,
-        subtotal: subtotalCents / 100,
-        buyerName: order.buyerName,
-      });
-    }
+    const subtotalCents = toCents(sale.price) * sale.quantity;
+    revenueCents += subtotalCents;
+    salesCount += sale.quantity;
+    orderIds.add(sale.orderId);
+    lines.push({ ...sale, subtotal: subtotalCents / 100 });
   }
 
-  sales.sort((first, second) => second.paidAt.localeCompare(first.paidAt));
-  return { salesCount, orderCount: orderIds.size, revenue: revenueCents / 100, sales };
+  lines.sort((first, second) => second.paidAt.localeCompare(first.paidAt));
+  return { salesCount, orderCount: orderIds.size, revenue: revenueCents / 100, sales: lines };
 }

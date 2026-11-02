@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { calculateSellerStats, periodRange, rangeError, SALES_PERIODS } from '@/features/seller/sellerStats';
 import { Order, OrderItem } from '@/types';
+import { salesOfSeller } from '@api/_lib/sellerSales';
 
 const item = (sellerId: string, price: number, quantity = 1, bookId = `${sellerId}-${price}`): OrderItem => ({
   bookId,
@@ -39,10 +40,11 @@ const ORDERS = [
 ];
 
 const NOW = new Date(2026, 10, 1, 12);
+const MY_SALES = salesOfSeller(ORDERS, 'me');
 
 describe('sellerStats', () => {
   it('CA-2/CA-3: counts only paid lines of this seller, in exact cents', () => {
-    const stats = calculateSellerStats(ORDERS, 'me', periodRange(SALES_PERIODS.all));
+    const stats = calculateSellerStats(MY_SALES, periodRange(SALES_PERIODS.all));
     expect(stats.salesCount).toBe(7);
     expect(stats.orderCount).toBe(3);
     expect(stats.revenue).toBe(43);
@@ -51,21 +53,21 @@ describe('sellerStats', () => {
   });
 
   it('uses local calendar boundaries for this month and this year', () => {
-    const month = calculateSellerStats(ORDERS, 'me', periodRange(SALES_PERIODS.month, '', '', NOW));
+    const month = calculateSellerStats(MY_SALES, periodRange(SALES_PERIODS.month, '', '', NOW));
     expect(month).toMatchObject({ salesCount: 2, revenue: 0.3 });
-    const year = calculateSellerStats(ORDERS, 'me', periodRange(SALES_PERIODS.year, '', '', NOW));
+    const year = calculateSellerStats(MY_SALES, periodRange(SALES_PERIODS.year, '', '', NOW));
     expect(year).toMatchObject({ salesCount: 4, revenue: 20.5 });
-    const week = calculateSellerStats(ORDERS, 'me', periodRange(SALES_PERIODS.last7Days, '', '', NOW));
+    const week = calculateSellerStats(MY_SALES, periodRange(SALES_PERIODS.last7Days, '', '', NOW));
     expect(week.salesCount).toBe(4);
   });
 
   it('includes the whole end day of a custom range and allows open ends', () => {
     const lastDay = periodRange(SALES_PERIODS.custom, '2026-10-31', '2026-10-31');
-    expect(calculateSellerStats(ORDERS, 'me', lastDay)).toMatchObject({ salesCount: 2, revenue: 20.2 });
+    expect(calculateSellerStats(MY_SALES, lastDay)).toMatchObject({ salesCount: 2, revenue: 20.2 });
     const since = periodRange(SALES_PERIODS.custom, '2026-01-01', '');
-    expect(calculateSellerStats(ORDERS, 'me', since).salesCount).toBe(4);
+    expect(calculateSellerStats(MY_SALES, since).salesCount).toBe(4);
     const until = periodRange(SALES_PERIODS.custom, '', '2025-12-31');
-    expect(calculateSellerStats(ORDERS, 'me', until)).toMatchObject({ salesCount: 3, revenue: 22.5 });
+    expect(calculateSellerStats(MY_SALES, until)).toMatchObject({ salesCount: 3, revenue: 22.5 });
   });
 
   it('reports an inverted range', () => {
@@ -75,7 +77,7 @@ describe('sellerStats', () => {
   });
 
   it('returns zeros for a seller without sales', () => {
-    expect(calculateSellerStats(ORDERS, 'nobody', periodRange(SALES_PERIODS.all))).toEqual({
+    expect(calculateSellerStats(salesOfSeller(ORDERS, 'nobody'), periodRange(SALES_PERIODS.all))).toEqual({
       salesCount: 0,
       orderCount: 0,
       revenue: 0,

@@ -2,17 +2,15 @@ import React, { useState } from 'react';
 import { AlertTriangle, Archive, BookOpen, CheckCircle, Clock, Edit3, Plus, Store } from 'lucide-react';
 
 import { Modal } from '@/components/ui/Modal';
-import { useSession } from '@/features/auth/SessionProvider';
 import { CreateBookModal } from '@/features/seller/CreateBookModal';
 import { SalesStats } from '@/features/seller/SalesStats';
 import { useSellerBooks } from '@/features/seller/useSellerBooks';
-import { useSellerOrders } from '@/features/seller/useSellerOrders';
+import { useSellerSales } from '@/features/seller/useSellerSales';
 import { Book } from '@/types';
 
 export const SellerDashboard: React.FC = () => {
-  const { currentUser } = useSession();
   const { sellerBooks, saveBook, withdrawBook } = useSellerBooks();
-  const { orders, isLoading, error } = useSellerOrders();
+  const { sales, isLoading, error } = useSellerSales();
   const [editor, setEditor] = useState<{ book: Book | null } | null>(null);
   const [bookToWithdraw, setBookToWithdraw] = useState<Book | null>(null);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
@@ -55,13 +53,7 @@ export const SellerDashboard: React.FC = () => {
         </button>
       </div>
 
-      <SalesStats
-        sellerId={currentUser?.id ?? ''}
-        orders={orders}
-        books={sellerBooks}
-        isLoading={isLoading}
-        error={error}
-      />
+      <SalesStats sales={sales} books={sellerBooks} isLoading={isLoading} error={error} />
 
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden">
         <div className="p-6 border-b border-slate-100 flex items-center justify-between">

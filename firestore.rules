@@ -191,8 +191,7 @@ service cloud.firestore {
     }
 
     match /orders/{orderId} {
-      allow read: if isAdmin()
-        || (signedIn() && (resource.data.buyerId == request.auth.uid || request.auth.uid in resource.data.sellerIds));
+      allow read: if isAdmin() || (signedIn() && resource.data.buyerId == request.auth.uid);
       allow create: if isActive()
         && incoming().buyerId == request.auth.uid
         && incoming().status == 'pending'

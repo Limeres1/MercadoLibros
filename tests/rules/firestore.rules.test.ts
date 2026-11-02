@@ -302,17 +302,15 @@ describe('orders', () => {
     await assertFails(updateDoc(doc(dbAs(BUYER), COLLECTIONS.orders, 'order_1'), { status: 'paid' }));
   });
 
-  it('buyer and seller read the order, other users do not', async () => {
+  it('only the buyer reads the order', async () => {
     await assertSucceeds(getDoc(doc(dbAs(BUYER), COLLECTIONS.orders, 'order_1')));
-    await assertSucceeds(getDoc(doc(dbAs(SELLER), COLLECTIONS.orders, 'order_1')));
     await assertFails(getDoc(doc(dbAs(OTHER_BUYER), COLLECTIONS.orders, 'order_1')));
   });
 
-  it('D2 CA-3: a seller lists only the orders that include their books', async () => {
+  it('D2 CA-3: sellers do not read orders, which may include other sellers items', async () => {
     const orders = collection(dbAs(SELLER), COLLECTIONS.orders);
-    await assertSucceeds(getDocs(query(orders, where('sellerIds', 'array-contains', SELLER))));
-    await assertFails(getDocs(query(orders, where('sellerIds', 'array-contains', OTHER_BUYER))));
-    await assertFails(getDocs(orders));
+    await assertFails(getDoc(doc(dbAs(SELLER), COLLECTIONS.orders, 'order_1')));
+    await assertFails(getDocs(query(orders, where('sellerIds', 'array-contains', SELLER))));
   });
 });
 
