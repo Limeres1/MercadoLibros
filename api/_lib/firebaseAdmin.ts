@@ -14,6 +14,8 @@ function adminApp() {
 
 export const adminDb = () => getFirestore(adminApp());
 
+export const adminAuth = () => getAuth(adminApp());
+
 export async function verifyRequestUser(request: Request): Promise<string | null> {
   const token = request.headers.get('authorization')?.match(/^Bearer (.+)$/)?.[1];
   if (!token) return null;

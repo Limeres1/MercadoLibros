@@ -1,68 +1,152 @@
+import { deleteField, doc, WriteBatch, writeBatch } from 'firebase/firestore';
+
 import { useToast } from '@/components/ui/Toast';
+import { API_ROUTES } from '@/constants/api';
 import { useSession } from '@/features/auth/SessionProvider';
-import { useBooks } from '@/features/catalog/BooksProvider';
-import { useReports } from '@/features/catalog/reports/ReportsProvider';
 import { deleteReview } from '@/features/catalog/reviews/reviewsService';
 import { getErrorMessage } from '@/lib/errors';
+import { postApi } from '@/services/api';
+import { addAuditEntry } from '@/services/auditLog';
+import { db } from '@/services/firebase';
+import { firestoreRefs } from '@/services/firestore';
+import { Book, Report, UserProfile } from '@/types';
+
+export type ReportResolution = 'dismiss' | 'remove_target';
 
 export function useModeration() {
-  const { users, setUserBlocked } = useSession();
-  const { updateBook } = useBooks();
-  const { reports, setReportStatus } = useReports();
+  const { currentUser } = useSession();
   const { showToast } = useToast();
 
-  const approveBook = async (bookId: string) => {
-    if (!(await updateBook(bookId, { status: 'published', rejectionReason: undefined }))) return;
-    showToast('Publicación aprobada. El libro ya está visible en el catálogo general.', 'success');
+  const run = async (task: () => Promise<void>, success: string, tone: 'success' | 'info' = 'success') => {
+    try {
+      await task();
+      showToast(success, tone);
+      return true;
+    } catch (error) {
+      showToast(getErrorMessage(error), 'error');
+      return false;
+    }
   };
 
-  const rejectBook = async (bookId: string, reason: string) => {
-    if (!(await updateBook(bookId, { status: 'rejected', rejectionReason: reason }))) return;
-    showToast('Publicación rechazada y devuelta al vendedor con el motivo indicado.', 'info');
+  const asAdmin = (write: (batch: WriteBatch, admin: UserProfile) => void) => async () => {
+    if (!currentUser) throw new Error('Iniciá sesión como administrador.');
+    const batch = writeBatch(db);
+    write(batch, currentUser);
+    await batch.commit();
   };
 
-  const withdrawBook = async (bookId: string) => {
-    const withdrawn = await updateBook(bookId, {
-      status: 'withdrawn',
-      rejectionReason: 'Retirado por el administrador por incumplimiento de normativas.',
+  const setBookStatus = (batch: WriteBatch, bookId: string, status: Book['status'], reason?: string) =>
+    batch.update(firestoreRefs.book(bookId), {
+      status,
+      rejectionReason: reason ?? deleteField(),
+      updatedAt: new Date().toISOString(),
     });
-    if (withdrawn) showToast('Libro retirado de la venta por administración.', 'info');
-    return withdrawn;
-  };
 
-  const resolveReport = async (reportId: string, action: 'dismiss' | 'remove_target') => {
-    const report = reports.find(candidate => candidate.id === reportId);
-    if (!report) return;
-
-    if (action === 'remove_target') {
-      if (report.targetType === 'book') {
-        if (!(await withdrawBook(report.targetId))) return;
-      } else {
-        try {
-          await deleteReview(report.targetId);
-        } catch (error) {
-          showToast(getErrorMessage(error), 'error');
-          return;
-        }
-      }
-    }
-
-    const updated = await setReportStatus(
-      reportId,
-      action === 'dismiss' ? 'dismissed' : 'resolved',
-      action === 'dismiss' ? 'Desestimada por falta de pruebas' : 'Contenido retirado por infracción',
+  const approveBook = (book: Book) =>
+    run(
+      asAdmin((batch, admin) => {
+        setBookStatus(batch, book.id, 'published');
+        addAuditEntry(batch, admin, {
+          action: 'approve_book',
+          targetType: 'book',
+          targetId: book.id,
+          targetLabel: book.title,
+        });
+      }),
+      'Publicación aprobada. El libro ya está en el catálogo.',
     );
-    if (!updated) return;
-    showToast(`Denuncia procesada: ${action === 'dismiss' ? 'Desestimada' : 'Contenido dado de baja'}`, 'success');
-  };
 
-  const toggleBlockUser = async (userId: string, reason?: string) => {
-    const user = users.find(candidate => candidate.id === userId);
-    if (!user) return;
-    if (await setUserBlocked(userId, !user.isBlocked, reason)) {
-      showToast('Estado del usuario actualizado con éxito.', 'success');
+  const rejectBook = (book: Book, reason: string) =>
+    run(
+      asAdmin((batch, admin) => {
+        setBookStatus(batch, book.id, 'rejected', reason);
+        addAuditEntry(batch, admin, {
+          action: 'reject_book',
+          targetType: 'book',
+          targetId: book.id,
+          targetLabel: book.title,
+          reason,
+        });
+      }),
+      'Publicación rechazada. El vendedor ve el motivo en su panel.',
+      'info',
+    );
+
+  const withdrawBook = (book: Book, reason: string) =>
+    run(
+      asAdmin((batch, admin) => {
+        setBookStatus(batch, book.id, 'withdrawn', reason);
+        addAuditEntry(batch, admin, {
+          action: 'withdraw_book',
+          targetType: 'book',
+          targetId: book.id,
+          targetLabel: book.title,
+          reason,
+        });
+      }),
+      'Libro retirado de la venta. Quienes lo compraron lo conservan.',
+      'info',
+    );
+
+  const resolveReport = (report: Report, resolution: ReportResolution, note: string) => {
+    const closeReport = (batch: WriteBatch, admin: UserProfile) => {
+      batch.update(doc(firestoreRefs.reports(), report.id), {
+        status: resolution === 'dismiss' ? 'dismissed' : 'resolved',
+        adminNote: note,
+        resolvedBy: admin.id,
+        resolvedAt: new Date().toISOString(),
+      });
+      addAuditEntry(batch, admin, {
+        action: resolution === 'dismiss' ? 'dismiss_report' : 'resolve_report',
+        targetType: 'report',
+        targetId: report.id,
+        targetLabel: `${report.reason}: ${report.targetTitle}`,
+        reason: note,
+      });
+    };
+
+    if (resolution === 'dismiss') return run(asAdmin(closeReport), 'Denuncia desestimada.');
+
+    if (report.targetType === 'review') {
+      return run(async () => {
+        const admin = currentUser;
+        if (!admin) throw new Error('Iniciá sesión como administrador.');
+        await deleteReview(report.targetId, batch => {
+          addAuditEntry(batch, admin, {
+            action: 'delete_review',
+            targetType: 'review',
+            targetId: report.targetId,
+            targetLabel: report.targetTitle,
+            reason: note,
+          });
+          closeReport(batch, admin);
+        });
+      }, 'Reseña eliminada y denuncia resuelta.');
     }
+
+    return run(
+      asAdmin((batch, admin) => {
+        setBookStatus(batch, report.targetId, 'withdrawn', note);
+        addAuditEntry(batch, admin, {
+          action: 'withdraw_book',
+          targetType: 'book',
+          targetId: report.targetId,
+          targetLabel: report.targetTitle,
+          reason: note,
+        });
+        closeReport(batch, admin);
+      }),
+      'Libro retirado de la venta y denuncia resuelta.',
+    );
   };
 
-  return { approveBook, rejectBook, withdrawBook, resolveReport, toggleBlockUser };
+  const setUserBlocked = (user: UserProfile, blocked: boolean, reason: string) =>
+    run(
+      () => postApi(API_ROUTES.adminBlockUser, { userId: user.id, blocked, reason }).then(() => undefined),
+      blocked
+        ? `${user.displayName} quedó bloqueado y ya no puede iniciar sesión.`
+        : `${user.displayName} puede volver a usar su cuenta.`,
+    );
+
+  return { approveBook, rejectBook, withdrawBook, resolveReport, setUserBlocked };
 }

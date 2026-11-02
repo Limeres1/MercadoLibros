@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { doc, getDoc, onSnapshot, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, query, setDoc, where } from 'firebase/firestore';
 
 import { useToast } from '@/components/ui/Toast';
 import { docIds } from '@/constants/firestore';
@@ -20,7 +20,6 @@ interface ReportsContextValue {
   reports: Report[];
   hasReported: (target: Pick<ReportTarget, 'type' | 'id'>) => boolean;
   createReport: (target: ReportTarget, reason: string, details: string) => Promise<boolean>;
-  setReportStatus: (reportId: string, status: Report['status'], adminNote?: string) => Promise<boolean>;
 }
 
 const [Provider, useReports] = createSafeContext<ReportsContextValue>('useReports');
@@ -102,21 +101,5 @@ export const ReportsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const setReportStatus = async (reportId: string, status: Report['status'], adminNote?: string) => {
-    if (!isAdmin || !userId || status === 'pending') return false;
-    try {
-      await updateDoc(doc(firestoreRefs.reports(), reportId), {
-        status,
-        ...(adminNote === undefined ? {} : { adminNote }),
-        resolvedBy: userId,
-        resolvedAt: new Date().toISOString(),
-      });
-      return true;
-    } catch (error) {
-      showToast(getErrorMessage(error), 'error');
-      return false;
-    }
-  };
-
-  return <Provider value={{ reports, hasReported, createReport, setReportStatus }}>{children}</Provider>;
+  return <Provider value={{ reports, hasReported, createReport }}>{children}</Provider>;
 };

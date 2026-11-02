@@ -80,11 +80,14 @@ export async function updateReview(reviewId: string, rating: number, comment: st
   );
 }
 
-export async function deleteReview(reviewId: string) {
+export async function deleteReview(reviewId: string, alsoWrite?: (batch: WriteBatch) => void) {
   const review = await getReview(reviewId);
   await commitWithStats(
     review.bookId,
-    batch => batch.delete(doc(firestoreRefs.reviews(), reviewId)),
+    batch => {
+      batch.delete(doc(firestoreRefs.reviews(), reviewId));
+      alsoWrite?.(batch);
+    },
     current => current.filter(existing => existing.id !== reviewId),
   );
 }

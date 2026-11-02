@@ -1,18 +1,19 @@
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, WriteBatch } from 'firebase/firestore';
 
 import { createId } from '@/lib/ids';
 import { firestoreRefs } from '@/services/firestore';
 import { AuditLogEntry, UserProfile } from '@/types';
 
-type AuditEvent = Pick<AuditLogEntry, 'action' | 'targetType' | 'targetId' | 'reason'>;
+export type AuditEvent = Pick<AuditLogEntry, 'action' | 'targetType' | 'targetId' | 'targetLabel' | 'reason'>;
 
-export function logAdminAction(admin: UserProfile, event: AuditEvent) {
+export function addAuditEntry(batch: WriteBatch, admin: UserProfile, event: AuditEvent) {
   const id = createId();
-  return setDoc(doc(firestoreRefs.auditLog(), id), {
+  const entry: AuditLogEntry = {
     id,
     adminId: admin.id,
     adminName: admin.displayName,
     ...event,
     createdAt: new Date().toISOString(),
-  });
+  };
+  batch.set(doc(firestoreRefs.auditLog(), id), entry);
 }

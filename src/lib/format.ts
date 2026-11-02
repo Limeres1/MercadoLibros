@@ -6,6 +6,10 @@ const dateFormatter = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 
 
 export const formatDate = (isoDate: string) => dateFormatter.format(new Date(isoDate));
 
+const dateTimeFormatter = new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' });
+
+export const formatDateTime = (isoDate: string) => dateTimeFormatter.format(new Date(isoDate));
+
 export const formatRating = (rating: number) => rating.toFixed(1);
 
 export const normalizeText = (text: string) =>

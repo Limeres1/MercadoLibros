@@ -141,8 +141,11 @@ describe('users', () => {
     await assertSucceeds(setDoc(ref, signup));
   });
 
-  it('lets an admin block a user', async () => {
-    await assertSucceeds(updateDoc(doc(dbAs(ADMIN), COLLECTIONS.users, BUYER), { isBlocked: true }));
+  it('D3: blocking goes only through the server, not even an admin can flip it from the client', async () => {
+    await assertFails(updateDoc(doc(dbAs(ADMIN), COLLECTIONS.users, BUYER), { isBlocked: true }));
+    await assertFails(updateDoc(doc(dbAs(ADMIN), COLLECTIONS.users, BLOCKED), { isBlocked: false }));
+    await assertFails(updateDoc(doc(dbAs(ADMIN), COLLECTIONS.users, BUYER), { blockReason: 'x' }));
+    await assertSucceeds(updateDoc(doc(dbAs(ADMIN), COLLECTIONS.users, BUYER), { displayName: 'Corregido' }));
   });
 });
 
@@ -168,6 +171,28 @@ describe('books', () => {
     await assertFails(getDoc(doc(dbAs(BUYER), COLLECTIONS.books, DRAFT_BOOK)));
     await assertSucceeds(getDoc(doc(dbAs(SELLER), COLLECTIONS.books, DRAFT_BOOK)));
     await assertSucceeds(getDoc(doc(testEnv.unauthenticatedContext().firestore(), COLLECTIONS.books, BOOK)));
+  });
+
+  it('D3 CA-1: the admin cannot reject or withdraw a book without a reason', async () => {
+    const ref = doc(dbAs(ADMIN), COLLECTIONS.books, DRAFT_BOOK);
+    await assertFails(updateDoc(ref, { status: 'rejected' }));
+    await assertFails(updateDoc(ref, { status: 'rejected', rejectionReason: '  ' }));
+    await assertFails(updateDoc(ref, { status: 'rejected', rejectionReason: 'mal' }));
+    await assertSucceeds(updateDoc(ref, { status: 'rejected', rejectionReason: 'Falta la sinopsis.' }));
+    await assertFails(updateDoc(doc(dbAs(ADMIN), COLLECTIONS.books, BOOK), { status: 'withdrawn' }));
+    await assertSucceeds(
+      updateDoc(doc(dbAs(ADMIN), COLLECTIONS.books, BOOK), {
+        status: 'withdrawn',
+        rejectionReason: 'Plagio confirmado.',
+      }),
+    );
+  });
+
+  it('D3: the admin can still recompute ratings on a book withdrawn by its seller', async () => {
+    await testEnv.withSecurityRulesDisabled(context =>
+      updateDoc(doc(context.firestore(), COLLECTIONS.books, BOOK), { status: 'withdrawn' }),
+    );
+    await assertSucceeds(updateDoc(doc(dbAs(ADMIN), COLLECTIONS.books, BOOK), { rating: 4, reviewCount: 1 }));
   });
 
   it('a seller cannot change sales or rating', async () => {
@@ -436,17 +461,44 @@ describe('reports and audit log', () => {
 
   it('only admins write the audit log and nobody edits it', async () => {
     const entry = {
+      id: 'entry_1',
       adminId: ADMIN,
       adminName: 'Admin',
       action: 'approve_book',
       targetType: 'book',
       targetId: BOOK,
+      targetLabel: 'Ficciones',
       createdAt: NOW,
     };
     await assertSucceeds(setDoc(doc(dbAs(ADMIN), COLLECTIONS.auditLog, 'entry_1'), entry));
-    await assertFails(setDoc(doc(dbAs(SELLER), COLLECTIONS.auditLog, 'entry_2'), { ...entry, adminId: SELLER }));
+    await assertFails(
+      setDoc(doc(dbAs(SELLER), COLLECTIONS.auditLog, 'entry_2'), { ...entry, id: 'entry_2', adminId: SELLER }),
+    );
     await assertFails(updateDoc(doc(dbAs(ADMIN), COLLECTIONS.auditLog, 'entry_1'), { reason: 'cambio' }));
     await assertFails(deleteDoc(doc(dbAs(ADMIN), COLLECTIONS.auditLog, 'entry_1')));
     await assertFails(getDoc(doc(dbAs(BUYER), COLLECTIONS.auditLog, 'entry_1')));
+  });
+
+  it('D3 CA-3: every entry names the admin and the target, and critical actions carry a reason', async () => {
+    const db = dbAs(ADMIN);
+    const entry = (id: string, overrides: Record<string, unknown> = {}) => ({
+      id,
+      adminId: ADMIN,
+      adminName: 'Admin',
+      action: 'reject_book',
+      targetType: 'book',
+      targetId: BOOK,
+      targetLabel: 'Ficciones',
+      reason: 'Falta la sinopsis.',
+      createdAt: NOW,
+      ...overrides,
+    });
+    await assertSucceeds(setDoc(doc(db, COLLECTIONS.auditLog, 'ok'), entry('ok')));
+    const { reason: _reason, ...withoutReason } = entry('no_reason');
+    await assertFails(setDoc(doc(db, COLLECTIONS.auditLog, 'no_reason'), withoutReason));
+    await assertFails(setDoc(doc(db, COLLECTIONS.auditLog, 'other_id'), entry('different')));
+    await assertFails(setDoc(doc(db, COLLECTIONS.auditLog, 'no_admin'), entry('no_admin', { adminName: '' })));
+    await assertFails(setDoc(doc(db, COLLECTIONS.auditLog, 'extra'), entry('extra', { hidden: true })));
+    await assertFails(setDoc(doc(db, COLLECTIONS.auditLog, 'action'), entry('action', { action: 'delete_user' })));
   });
 });

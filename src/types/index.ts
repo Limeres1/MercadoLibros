@@ -190,6 +190,7 @@ export interface AuditLogEntry {
   action: AuditAction;
   targetType: 'book' | 'review' | 'user' | 'report';
   targetId: string;
+  targetLabel: string;
   reason?: string;
   createdAt: string;
 }

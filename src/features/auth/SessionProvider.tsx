@@ -10,7 +10,7 @@ import {
   updateProfile,
   User,
 } from 'firebase/auth';
-import { deleteField, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 
 import { useToast } from '@/components/ui/Toast';
 import { FAVORITE_SHOWCASE_LIMIT, SIGNUP_ROLES } from '@/constants/statuses';
@@ -42,7 +42,6 @@ interface SessionContextValue {
   sendPasswordReset: (email: string) => Promise<boolean>;
   updateUserProfile: (data: Partial<EditableProfile>) => Promise<void>;
   updateFavoriteBookIds: (bookIds: string[]) => Promise<void>;
-  setUserBlocked: (userId: string, blocked: boolean, reason?: string) => Promise<boolean>;
 }
 
 const [Provider, useSession] = createSafeContext<SessionContextValue>('useSession');
@@ -235,19 +234,6 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const setUserBlocked = async (userId: string, blocked: boolean, reason?: string): Promise<boolean> => {
-    try {
-      await updateDoc(firestoreRefs.user(userId), {
-        isBlocked: blocked,
-        blockReason: blocked ? reason || 'Infracción de normas comunitarias' : deleteField(),
-      });
-      return true;
-    } catch (error) {
-      showToast(getErrorMessage(error), 'error');
-      return false;
-    }
-  };
-
   return (
     <Provider
       value={{
@@ -264,7 +250,6 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         sendPasswordReset,
         updateUserProfile,
         updateFavoriteBookIds,
-        setUserBlocked,
       }}
     >
       {children}
