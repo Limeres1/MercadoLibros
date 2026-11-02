@@ -117,7 +117,7 @@ export const OrdersPage: React.FC = () => {
           action={
             <Link
               to={ROUTES.home}
-              className="inline-block rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+              className="inline-block rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
             >
               Explorar el catálogo
             </Link>

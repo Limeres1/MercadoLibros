@@ -50,7 +50,7 @@ export const LibraryPage: React.FC = () => {
           </span>
           <button
             onClick={() => navigate(ROUTES.home)}
-            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors"
+            className="px-3.5 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold transition-colors"
           >
             Explorar más libros
           </button>
@@ -67,7 +67,7 @@ export const LibraryPage: React.FC = () => {
           </p>
           <button
             onClick={() => navigate(ROUTES.home)}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors"
+            className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold transition-colors"
           >
             Ir al Catálogo de Obras
           </button>
@@ -128,7 +128,7 @@ export const LibraryPage: React.FC = () => {
                   </div>
                   <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-amber-600 rounded-full transition-all duration-500"
+                      className="h-full bg-amber-700 rounded-full transition-all duration-500"
                       style={{ width: `${progress}%` }}
                     ></div>
                   </div>
@@ -137,7 +137,7 @@ export const LibraryPage: React.FC = () => {
                 <div className="flex items-center gap-2 pt-1">
                   <button
                     onClick={() => handleOpenReader(item)}
-                    className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-98 text-white rounded-xl text-xs font-bold shadow-xs flex items-center justify-center gap-2 transition-all"
+                    className="flex-1 py-2.5 bg-amber-700 hover:bg-amber-800 active:scale-98 text-white rounded-xl text-xs font-bold shadow-xs flex items-center justify-center gap-2 transition-all"
                   >
                     <BookOpen className="w-4 h-4" />
                     <span>{current > 1 ? 'Continuar Leyendo' : 'Comenzar Lectura'}</span>

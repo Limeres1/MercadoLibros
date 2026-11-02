@@ -45,6 +45,8 @@ export const BookCard: React.FC<BookCardProps> = ({
     <article className="group relative flex w-full flex-col">
       <Link
         to={paths.book(book.id)}
+        aria-hidden="true"
+        tabIndex={-1}
         className="relative block aspect-2/3 overflow-hidden rounded-r-md rounded-l-sm bg-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.12),0_8px_20px_-8px_rgba(15,23,42,0.35)] ring-1 ring-slate-900/5 transition-shadow duration-200 group-hover:shadow-[0_2px_4px_rgba(15,23,42,0.12),0_16px_32px_-12px_rgba(15,23,42,0.45)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600"
       >
         <img src={book.coverUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
@@ -120,7 +122,7 @@ export const BookCard: React.FC<BookCardProps> = ({
               className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-white ${
                 cartQuantity > 0
                   ? 'border border-emerald-600 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                  : 'bg-amber-600 text-white hover:bg-amber-700'
+                  : 'bg-amber-700 text-white hover:bg-amber-800'
               }`}
             >
               {cartQuantity > 0 ? (

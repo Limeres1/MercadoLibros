@@ -143,7 +143,7 @@ const AuthDialog: React.FC = () => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-600/20 transition-all"
+              className="w-full py-2.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-600/20 transition-all"
             >
               {isSubmitting ? 'Iniciando sesión...' : 'Entrar a mi Cuenta'}
             </button>
@@ -164,7 +164,7 @@ const AuthDialog: React.FC = () => {
                       : 'border-slate-200 hover:bg-slate-50 text-slate-600'
                   }`}
                 >
-                  <ShoppingBag className="w-4 h-4 text-amber-600" />
+                  <ShoppingBag className="w-4 h-4 text-amber-700" />
                   <span className="font-bold text-xs">Comprador</span>
                   <span className="text-[10px] text-slate-400">Comprar y leer libros</span>
                 </button>
@@ -237,7 +237,7 @@ const AuthDialog: React.FC = () => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-600/20 transition-all"
+              className="w-full py-2.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-600/20 transition-all"
             >
               {isSubmitting
                 ? 'Creando cuenta...'
@@ -249,7 +249,7 @@ const AuthDialog: React.FC = () => {
         {authModalTab === 'forgot' && (
           <form onSubmit={handleForgot} className="space-y-4">
             <div className="text-center space-y-1">
-              <KeyRound className="w-8 h-8 text-amber-600 mx-auto" />
+              <KeyRound className="w-8 h-8 text-amber-700 mx-auto" />
               <h4 className="text-sm font-bold text-slate-900">Restablecer Contraseña</h4>
               <p className="text-xs text-slate-500">
                 Ingresa tu correo y te enviaremos el enlace de recuperación vía Firebase.
@@ -283,7 +283,7 @@ const AuthDialog: React.FC = () => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors"
+                className="flex-1 py-2.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold shadow-md transition-colors"
               >
                 {isSubmitting ? 'Enviando...' : 'Enviar Correo de Recuperación'}
               </button>

@@ -99,7 +99,7 @@ export const SampleReaderModal: React.FC<SampleReaderModalProps> = ({ book, onCl
 
         {sample && (
           <div className="my-8 p-6 rounded-xl bg-amber-50/70 border border-amber-200/80 text-center font-sans">
-            <Sparkles className="w-6 h-6 text-amber-600 mx-auto mb-2" />
+            <Sparkles className="w-6 h-6 text-amber-700 mx-auto mb-2" />
             <h4 className="font-bold text-slate-900 text-sm mb-1">Fin del fragmento de muestra</h4>
             <p className="text-xs text-slate-600 max-w-md mx-auto mb-4">
               ¿Deseas continuar leyendo la obra completa? Adquiere tu ejemplar digital o físico de inmediato.
@@ -111,7 +111,7 @@ export const SampleReaderModal: React.FC<SampleReaderModalProps> = ({ book, onCl
                 addToCart(book);
                 onClose();
               }}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-600/20 transition-all enabled:hover:scale-102 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-600/20 transition-all enabled:hover:scale-102 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <ShoppingBag className="w-4 h-4" />
               <span>{canBuy ? `Comprar por $${book.price.toFixed(2)}` : 'No disponible para comprar'}</span>

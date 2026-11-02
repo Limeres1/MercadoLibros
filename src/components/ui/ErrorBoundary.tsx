@@ -26,7 +26,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
             action={
               <a
                 href={ROUTES.home}
-                className="inline-block px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-bold transition-colors"
+                className="inline-block px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-sm font-bold transition-colors"
               >
                 Volver al inicio
               </a>

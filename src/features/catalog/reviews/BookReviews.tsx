@@ -14,7 +14,7 @@ const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf37
 const RATING_LABELS = ['', 'Muy malo', 'Malo', 'Regular', 'Bueno', 'Excelente'];
 
 const Stars: React.FC<{ rating: number; size?: string }> = ({ rating, size = 'h-3.5 w-3.5' }) => (
-  <span className="flex text-amber-400" aria-label={`${rating} de 5 estrellas`}>
+  <span role="img" className="flex text-amber-400" aria-label={`${rating} de 5 estrellas`}>
     {[1, 2, 3, 4, 5].map(star => (
       <Star
         key={star}
@@ -324,7 +324,7 @@ export const BookReviews: React.FC<BookReviewsProps> = ({ book, onReport }) => {
       {currentUser && !ownReview && canReview && (
         <div>
           <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-900">
-            <MessageSquarePlus className="h-4 w-4 text-amber-600" aria-hidden="true" />
+            <MessageSquarePlus className="h-4 w-4 text-amber-700" aria-hidden="true" />
             Contá qué te pareció
           </h3>
           <ReviewForm

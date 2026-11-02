@@ -137,7 +137,7 @@ const PublicProfile: React.FC<{ profile: UserProfile; sellerBooks: Book[] }> = (
 
       <section aria-labelledby="vitrina" className="space-y-4">
         <h2 id="vitrina" className="flex items-center gap-2 text-lg font-bold text-slate-900">
-          <Award className="h-5 w-5 text-amber-600" aria-hidden="true" />
+          <Award className="h-5 w-5 text-amber-700" aria-hidden="true" />
           Libros favoritos
         </h2>
         {isLoading ? (
@@ -154,7 +154,7 @@ const PublicProfile: React.FC<{ profile: UserProfile; sellerBooks: Book[] }> = (
       {profile.role === 'seller' && (
         <section aria-labelledby="publicaciones" className="space-y-4">
           <h2 id="publicaciones" className="flex items-center gap-2 text-lg font-bold text-slate-900">
-            <BookOpen className="h-5 w-5 text-amber-600" aria-hidden="true" />
+            <BookOpen className="h-5 w-5 text-amber-700" aria-hidden="true" />
             Libros que vende
           </h2>
           {sellerBooks.length === 0 ? (

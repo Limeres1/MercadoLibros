@@ -110,7 +110,7 @@ export const CatalogPage: React.FC = () => {
             <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
             Filtros
             {activeFilterCount > 0 && (
-              <span className="rounded-full bg-amber-600 px-1.5 text-xs text-white">{activeFilterCount}</span>
+              <span className="rounded-full bg-amber-700 px-1.5 text-xs text-white">{activeFilterCount}</span>
             )}
           </button>
           <label htmlFor="catalog-sort" className="sr-only">
@@ -146,7 +146,7 @@ export const CatalogPage: React.FC = () => {
                     onClick={() => setParam(CATALOG_PARAMS.genre, genre)}
                     className={`whitespace-nowrap rounded-full border px-3.5 py-1.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-amber-600 ${
                       isActive
-                        ? 'border-amber-600 bg-amber-600 font-semibold text-white'
+                        ? 'border-amber-600 bg-amber-700 font-semibold text-white'
                         : 'border-slate-300 bg-white text-slate-700 hover:border-amber-500 hover:text-amber-800'
                     }`}
                   >

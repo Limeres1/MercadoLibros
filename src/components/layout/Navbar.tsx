@@ -51,6 +51,7 @@ export const Navbar: React.FC = () => {
   const searchQuery = searchParams.get(SEARCH_PARAM) ?? '';
   const pendingReportsCount = reports.filter(report => report.status === 'pending').length;
   const isSellerOrAdmin = currentRole === 'seller' || currentRole === 'admin';
+  const navLabelClass = isSellerOrAdmin ? NAV_LABEL_CLASS : currentUser ? 'sr-only xl:not-sr-only' : undefined;
 
   useEffect(() => {
     if (!isUserMenuOpen) return;
@@ -84,7 +85,7 @@ export const Navbar: React.FC = () => {
             </div>
             <div>
               <span className="font-extrabold text-lg sm:text-xl tracking-tight text-slate-900 group-hover:text-amber-700 transition-colors">
-                Mercado <span className="text-amber-600">Libros</span>
+                Mercado <span className="text-amber-700">Libros</span>
               </span>
               <p className="text-[10px] text-slate-500 tracking-wider uppercase font-semibold hidden sm:block lg:hidden 2xl:block">
                 Ecosistema Digital de Lectura
@@ -108,7 +109,7 @@ export const Navbar: React.FC = () => {
                 className="absolute right-1.5 flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-amber-700 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-200 rounded-full transition-all shadow-2xs"
                 aria-label="Escanear código de barras o ISBN"
               >
-                <ScanBarcode className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
+                <ScanBarcode className="w-3.5 h-3.5 text-amber-700" aria-hidden="true" />
                 <span>ISBN</span>
               </button>
             </div>
@@ -120,18 +121,18 @@ export const Navbar: React.FC = () => {
           >
             <NavLink to={ROUTES.home} end className={navLinkClass} title="Catálogo">
               <BookMarked className="w-4 h-4" aria-hidden="true" />
-              <span className={NAV_LABEL_CLASS}>Catálogo</span>
+              <span className={navLabelClass}>Catálogo</span>
             </NavLink>
 
             {currentUser && (
               <>
                 <NavLink to={ROUTES.library} className={navLinkClass} title="Mi biblioteca">
                   <Library className="w-4 h-4" aria-hidden="true" />
-                  <span className={NAV_LABEL_CLASS}>Biblioteca</span>
+                  <span className={navLabelClass}>Biblioteca</span>
                 </NavLink>
                 <NavLink to={ROUTES.orders} className={navLinkClass} title="Mis pedidos">
                   <PackageCheck className="w-4 h-4" aria-hidden="true" />
-                  <span className={NAV_LABEL_CLASS}>Pedidos</span>
+                  <span className={navLabelClass}>Pedidos</span>
                 </NavLink>
               </>
             )}
@@ -139,14 +140,14 @@ export const Navbar: React.FC = () => {
             {isSellerOrAdmin && (
               <NavLink to={ROUTES.seller} className={navLinkClass} title="Panel de vendedor">
                 <Store className="w-4 h-4 text-emerald-600" aria-hidden="true" />
-                <span className={NAV_LABEL_CLASS}>Vender</span>
+                <span className={navLabelClass}>Vender</span>
               </NavLink>
             )}
 
             {currentRole === 'admin' && (
               <NavLink to={ROUTES.admin} className={navLinkClass} title="Administración">
                 <ShieldCheck className="w-4 h-4 text-red-600" aria-hidden="true" />
-                <span className={NAV_LABEL_CLASS}>Admin</span>
+                <span className={navLabelClass}>Admin</span>
                 {pendingReportsCount > 0 && (
                   <span className="w-2 h-2 rounded-full bg-red-500 absolute top-1.5 right-1">
                     <span className="sr-only">Denuncias pendientes</span>
@@ -184,7 +185,7 @@ export const Navbar: React.FC = () => {
             >
               <ShoppingCart className="w-5 h-5" aria-hidden="true" />
               {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-amber-600 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 bg-amber-700 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
                   {cartCount}
                 </span>
               )}
@@ -196,6 +197,7 @@ export const Navbar: React.FC = () => {
                   onClick={() => setIsUserMenuOpen(open => !open)}
                   aria-expanded={isUserMenuOpen}
                   aria-haspopup="menu"
+                  aria-label={`Menú de ${currentUser.displayName}`}
                   className="flex items-center gap-2 p-1 pl-2 hover:bg-slate-100 rounded-full border border-slate-200 transition-colors"
                 >
                   <img
@@ -283,7 +285,7 @@ export const Navbar: React.FC = () => {
               <button
                 onClick={() => openAuth('login')}
                 aria-label="Ingresar"
-                className="inline-flex items-center gap-1.5 p-2 sm:px-3.5 sm:py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+                className="inline-flex items-center gap-1.5 p-2 sm:px-3.5 sm:py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
               >
                 <LogIn className="w-3.5 h-3.5" aria-hidden="true" />
                 <span className="hidden sm:inline">Ingresar</span>
@@ -308,7 +310,7 @@ export const Navbar: React.FC = () => {
               className="absolute right-1 flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-full shadow-2xs"
               aria-label="Escanear código de barras o ISBN"
             >
-              <ScanBarcode className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
+              <ScanBarcode className="w-3.5 h-3.5 text-amber-700" aria-hidden="true" />
               <span>ISBN</span>
             </button>
           </div>

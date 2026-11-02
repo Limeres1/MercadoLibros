@@ -120,7 +120,7 @@ export const SellerDashboard: React.FC = () => {
 
                         {book.status === 'pending_review' && (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                            <Clock className="w-3.5 h-3.5 text-amber-600" />
+                            <Clock className="w-3.5 h-3.5 text-amber-700" />
                             <span>En Revisión Admin</span>
                           </span>
                         )}

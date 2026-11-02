@@ -633,7 +633,7 @@ export const CreateBookModal: React.FC<CreateBookModalProps> = ({ bookToEdit, on
                 htmlFor={ids.sampleFile}
                 className="text-xs font-semibold text-slate-800 flex items-center gap-1.5"
               >
-                <FileText className="w-4 h-4 text-amber-600" aria-hidden="true" />
+                <FileText className="w-4 h-4 text-amber-700" aria-hidden="true" />
                 Muestra gratuita
               </label>
               <span className="text-[11px] text-slate-500">
