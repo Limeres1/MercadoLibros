@@ -2,6 +2,7 @@ import { API_ROUTES } from '../../src/constants/api.js';
 import { ORDER_PARAM, ROUTES } from '../../src/constants/routes.js';
 
 const API = 'https://api.mercadopago.com';
+const PREFERENCE_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
 export interface MercadoPagoPayment {
   id: number;
@@ -50,11 +51,20 @@ export async function createPreference(
         external_reference: orderId,
         payment_methods: { excluded_payment_types: excludedPaymentTypes.map(id => ({ id })) },
         back_urls: { success: returnUrl, failure: returnUrl, pending: returnUrl },
+        expires: true,
+        expiration_date_to: new Date(Date.now() + PREFERENCE_LIFETIME_MS).toISOString(),
         ...(isPublicUrl ? { auto_return: 'approved', notification_url: `${origin}${API_ROUTES.paymentWebhook}` } : {}),
       }),
     },
   );
   return { preferenceId: preference.id, checkoutUrl: preference.sandbox_init_point ?? preference.init_point };
+}
+
+export async function expirePreference(preferenceId: string) {
+  await request(`/checkout/preferences/${encodeURIComponent(preferenceId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ expires: true, expiration_date_to: new Date().toISOString() }),
+  });
 }
 
 export const getPayment = (paymentId: string) =>

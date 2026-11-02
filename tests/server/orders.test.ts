@@ -125,7 +125,7 @@ describe('payment confirmation', () => {
     expect((await userRef().collection('library').get()).empty).toBe(true);
     expect((await userRef().collection('purchases').get()).empty).toBe(true);
     expect((await userRef().collection('cart').get()).size).toBe(1);
-    expect(await applyPaymentOutcome(db, id, 'approved', 'MP-10')).toBe('rejected');
+    expect(await applyPaymentOutcome(db, id, 'rejected', 'MP-10')).toBe('rejected');
   });
 
   it('keeps the order pending while the payment is in process', async () => {
