@@ -231,7 +231,7 @@ const BookDetail: React.FC<{ book: Book }> = ({ book }) => {
                   type="button"
                   onClick={() => addToCart(book)}
                   disabled={soldOut}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-amber-600 px-5 py-3 text-sm font-bold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:flex-none"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-amber-700 px-5 py-3 text-sm font-bold text-white hover:bg-amber-800 disabled:cursor-not-allowed disabled:bg-slate-300 sm:flex-none"
                 >
                   <ShoppingBag className="h-4 w-4" aria-hidden="true" />
                   Agregar al carrito

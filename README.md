@@ -1,168 +1,144 @@
 # Mercado Libros
 
-Marketplace de libros digitales: los lectores compran y leen en un lector integrado, los vendedores publican sus obras y un administrador modera el contenido.
+Marketplace de libros: los lectores compran libros digitales e impresos y leen los digitales en un lector integrado, los vendedores publican sus obras y un administrador modera el contenido. Incluye un asistente de recomendaciones y la redacción de sinopsis con IA (Gemini).
 
 **Producción:** https://mercado-libros.vercel.app
 
+## Qué se puede hacer
+
+| Rol           | Funciones                                                                                                                                                                                                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Visitante     | Catálogo con búsqueda (título, autor o ISBN, sin tildes), filtros por género, idioma, formato y precio, orden por valoración, precio, novedad o año; ficha del libro con reseñas, muestra gratuita y escaneo de código de barras. Para comprar se le pide iniciar sesión.                                                                  |
+| Comprador     | Registro e inicio de sesión (email o Google), recuperación de contraseña, perfil con 4 libros destacados, favoritos, carrito, pago con Mercado Pago, historial de pedidos, biblioteca y lector (tamaño de letra, tema, interlineado, progreso y marcadores), reseñas de libros comprados, denuncias y asistente de recomendaciones con IA. |
+| Vendedor      | Publicar libros con portada, archivo EPUB/TXT y muestra; borradores y envío a revisión; motivo de rechazo; editar y retirar de la venta (los compradores lo conservan); sinopsis, género y palabras clave propuestos por IA; ventas e ingresos por período.                                                                                |
+| Administrador | Aprobar o rechazar publicaciones con motivo, resolver denuncias (desestimar, retirar el libro o eliminar la reseña), buscar libros y usuarios, bloquear y desbloquear usuarios con motivo y consultar el registro de auditoría.                                                                                                            |
+
 ## Stack
 
-React 19 · TypeScript · Vite · Tailwind CSS 4 · React Router 7 · Firebase (Auth, Firestore) · Gemini (Google AI Studio) · Vitest
+React 19 · TypeScript · Vite · Tailwind CSS 4 · React Router 7 · Firebase (Auth, Firestore, Admin SDK) · Gemini (Google AI Studio) · Mercado Pago · Funciones serverless de Vercel · Vitest
 
 ## Cómo correrlo
 
+Requiere Node 22.
+
 ```bash
 npm install
-cp .env.example .env.local   # completar VITE_FIREBASE_* (Firebase → Configuración del proyecto) y GEMINI_API_KEY
-npm run dev                  # http://localhost:3000, incluye /api/ai
+cp .env.example .env.local   # completar las variables (ver abajo)
+npm run dev                  # http://localhost:3000, también sirve las funciones de api/
 ```
 
-| Script               | Qué hace                                                     |
-| -------------------- | ------------------------------------------------------------ |
-| `npm run dev`        | servidor de desarrollo                                       |
-| `npm run build`      | build de producción en `dist/`                               |
-| `npm run lint`       | chequeo de tipos (TypeScript, sin variables sin usar)        |
-| `npm test`           | tests con Vitest                                             |
-| `npm run test:rules` | tests de `firestore.rules` en el emulador (requiere Java 21) |
-| `npm run seed`       | crea las cuentas demo y los libros iniciales en Firebase     |
+| Script               | Qué hace                                                                        |
+| -------------------- | ------------------------------------------------------------------------------- |
+| `npm run dev`        | servidor de desarrollo con las funciones de `api/`                              |
+| `npm run build`      | build de producción en `dist/`                                                  |
+| `npm run lint`       | TypeScript, ESLint y Prettier                                                   |
+| `npm run format`     | corrige ESLint y formatea                                                       |
+| `npm test`           | tests unitarios y de pantallas (Vitest)                                         |
+| `npm run test:rules` | reglas de Firestore y lógica del servidor contra el emulador (requiere Java 21) |
+| `npm run seed`       | crea cuentas y libros iniciales en un proyecto de Firebase nuevo                |
+
+## Variables de entorno
+
+| Variable                                                                                                                                                                      | Dónde se usa                                                                                                            | Obligatoria                        |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID` | navegador (configuración web de Firebase) y servidor (`PROJECT_ID`)                                                     | sí                                 |
+| `GEMINI_API_KEY`                                                                                                                                                              | servidor: `/api/ai` y `/api/recommendations`                                                                            | sí                                 |
+| `FIREBASE_SERVICE_ACCOUNT`                                                                                                                                                    | servidor: JSON de la cuenta de servicio en una línea, para pagos, lector, ventas, recomendaciones y bloqueo de usuarios | sí, en Vercel                      |
+| `GOOGLE_APPLICATION_CREDENTIALS`                                                                                                                                              | local: ruta al JSON de la cuenta de servicio (reemplaza a la anterior)                                                  | sólo en local                      |
+| `MP_ACCESS_TOKEN`                                                                                                                                                             | servidor: Access Token **de prueba** de Mercado Pago                                                                    | no: sin él se usa el pago simulado |
+| `MP_CURRENCY`                                                                                                                                                                 | moneda de Mercado Pago, por defecto `ARS`                                                                               | no                                 |
+| `GEMINI_MODEL`                                                                                                                                                                | modelo de Gemini preferido                                                                                              | no                                 |
+| `SEED_DEMO_PASSWORD`                                                                                                                                                          | contraseña de las cuentas creadas por `npm run seed`                                                                    | sólo para la semilla               |
+
+Las claves del servidor nunca llevan el prefijo `VITE_`, así no llegan al navegador. `.env.local` y el JSON de la cuenta de servicio no se suben al repositorio.
 
 ## Cuentas demo
 
-`npm run seed` crea (o actualiza) en Firebase Auth las cuentas demo con UID fijos y carga en Firestore sus perfiles, los libros y los contenidos iniciales. Necesita en `.env.local`:
+En producción hay cuentas de los tres roles, todas con la misma contraseña (la comparte el equipo):
 
-- `GOOGLE_APPLICATION_CREDENTIALS`: ruta al JSON de la cuenta de servicio (Firebase → Configuración → Cuentas de servicio → Generar clave). No se sube al repo.
-- `SEED_DEMO_PASSWORD`: contraseña común de las cuentas demo.
+| Rol           | Email                                                             |
+| ------------- | ----------------------------------------------------------------- |
+| Administrador | `admin@mercadolibros.com`                                         |
+| Vendedor      | `tinta.sur@mercadolibros.com`, `mar.de.paginas@mercadolibros.com` |
+| Comprador     | `renata.ortiz@mercadolibros.com`                                  |
 
-| Rol       | Email                               |
-| --------- | ----------------------------------- |
-| Admin     | `admin@mercadolibros.com`           |
-| Vendedor  | `libreria.atenea@mercadolibros.com` |
-| Vendedor  | `libros.antiguos@mercadolibros.com` |
-| Comprador | `sofia.lectora@mercadolibros.com`   |
-
-El rol admin sólo se asigna desde la semilla o desde Firestore; en el registro se elige comprador o vendedor. ## Catálogo y búsqueda
-
-El catálogo no descarga todos los libros: pide a Firestore páginas de 24 (`useCatalogBooks`) y carga la siguiente al llegar al final de la lista. Género, idioma, formato y orden se resuelven en Firestore; la búsqueda usa el campo `searchTokens` (palabras de título y autor sin tildes y sus prefijos, más el ISBN), que `BooksProvider` calcula con `buildSearchTokens` cada vez que se crea o edita un libro. Cada combinación de filtro y orden necesita los índices de `firestore.indexes.json`; se publican con `npx firebase deploy --only firestore:indexes`.
-
-Para mostrar libros sueltos (ficha, lector, favoritos, biblioteca, carrito) se usan `useBook(id)` y `useBooksByIds(ids)`, que leen sólo esos documentos.
-
-## Pagos (Mercado Pago)
-
-El navegador nunca marca un pedido como pagado: el carrito se lee en el servidor y todo el circuito pasa por funciones de Vercel en `api/`.
-
-1. `POST /api/checkout` valida el carrito (libros publicados, stock, digitales no comprados, dirección para impresos), crea el pedido `pending` y la preferencia de Mercado Pago (Checkout Pro). Devuelve el link de pago.
-2. Mercado Pago avisa a `POST /api/payments/webhook`; la función consulta el pago en la API de Mercado Pago y, si está aprobado, en una sola transacción marca el pedido `paid`, descuenta stock, suma ventas, agrega los digitales a la biblioteca, registra las compras y vacía esos libros del carrito. Repetir el aviso no duplica nada; un pago rechazado deja el pedido `rejected`.
-3. Mientras el usuario tenga un pedido de Mercado Pago pendiente, la app llama sola a `POST /api/payments/sync` (al volver a la pestaña y cada 5 segundos), que busca el pago por `external_reference`. Así el pedido se confirma aunque el webhook no llegue (en `localhost` Mercado Pago no permite webhook ni retorno automático: `auto_return` exige una URL https).
-
-En el checkout se elige el medio de pago (tarjeta, dinero en cuenta o efectivo en Rapipago/Pago Fácil); la preferencia excluye los demás tipos (`PAYMENT_OPTIONS` en `src/constants/payments.ts`).
-
-Variables del servidor: `MP_ACCESS_TOKEN` (Access Token **de prueba** de una aplicación de Mercado Pago), `MP_CURRENCY` (por defecto `ARS`) y `FIREBASE_SERVICE_ACCOUNT` (JSON de la cuenta de servicio en una línea; en local alcanza con `GOOGLE_APPLICATION_CREDENTIALS`). Para pagar en el sandbox, en el checkout entrar con una **cuenta de prueba de comprador** de Mercado Pago.
-
-Sin `MP_ACCESS_TOKEN` el checkout lleva a `/pago/simulado`, donde se aprueba o rechaza el pago con los mismos estados (plan B para demos). La lógica de pedidos se prueba contra el emulador en `tests/server/`.
-
-## Páginas y progreso del lector
-
-El lector agrupa el texto completo en páginas de dos párrafos con `paginateReaderText`; el tamaño de letra y el tema no cambian sus números. Biblioteca y lector calculan el porcentaje con `readingProgress` y la misma cantidad de páginas, independiente de las páginas editoriales de la ficha.
-
-Al confirmar una compra digital, el servidor calcula `library.totalPages` desde `bookContents`. Para compras anteriores, al abrir el lector se compara el texto con la biblioteca: `POST /api/reader/sync` verifica la sesión y la propiedad del libro, y corrige la cantidad de páginas en una transacción. No crea compras ni modifica marcadores; mantiene la posición guardada dentro del rango disponible. Si falta el texto o falla la sincronización, no sustituye el contenido por la muestra y permite reintentar. Los libros retirados siguen usando este flujo para sus compradores.
-
-La corrección requiere las funciones de servidor y Firebase Admin configurados, igual que los pagos. Las reglas del cliente siguen permitiendo modificar únicamente `lastReadPage` y `bookmarks`. Los tests de paginación y pantallas corren con `npm test`; las transacciones, pagos y permisos, con `npm run test:rules`.
-
-## Reglas de Firestore
-
-`firestore.rules` define quién lee y escribe cada colección; los tests están en `tests/rules/` y corren contra el emulador con `npm run test:rules` (necesita Java 21: `brew install openjdk@21`). Se publican con `npx firebase deploy --only firestore:rules`.
-
-- `users`: cada uno crea su perfil como comprador o vendedor; nadie cambia su propio `role`, `email` ni `isBlocked`.
-- `users/{uid}/favorites`, `cart`, `library`: sólo el dueño (y el admin para leer). La biblioteca no se crea desde el navegador: la escribe el flujo de pago con Admin SDK; el dueño sólo guarda `lastReadPage` y `bookmarks`.
-- `books`: los crea un vendedor activo, siempre como `draft`; el vendedor pasa a `pending_review` o `withdrawn`, sólo el admin publica o rechaza. `rating` y `reviewCount` se actualizan en el mismo batch que la reseña.
-- `bookContents`: el texto completo lo leen el vendedor, el admin y quien tiene el libro en su biblioteca.
-- `orders`: el comprador crea pedidos `pending` con `totalAmount = subtotal + shippingCost`; el pago (servidor) los marca `paid`.
-- `reviews`: sólo quien tiene el libro en su biblioteca, puntaje 1–5, id `docIds.review(bookId, userId)`.
-- `reports`: cualquier usuario activo denuncia; sólo el admin resuelve.
-- `auditLog`: sólo el admin escribe (con `logAdminAction` de `@/services/auditLog`) y nadie edita ni borra.
-- Usuarios bloqueados no pueden crear libros, pedidos, reseñas ni denuncias.
+El rol administrador sólo se asigna desde Firestore; al registrarse se elige comprador o vendedor.
 
 ## Estructura
 
 ```
 src/
-  app/            App (rutas) y AppProviders
-  components/
-    layout/       Navbar, Footer, AppLayout, 404
-    ui/           Modal, Toast, EmptyState, ErrorBoundary
-  constants/      ROUTES / paths, STORAGE_KEYS
+  app/            rutas (App.tsx) y providers
+  components/     layout (Navbar, Footer) y ui (Modal, Toast, EmptyState…)
+  constants/      rutas, colecciones, estados, catálogo, pagos
   features/
-    auth/         sesión, login/registro, RequireRole, perfil        (Zona A)
-    catalog/      catálogo, ficha, muestra, escáner, reseñas,
-                  denuncias, favoritos                                (Zona B)
-    shop/         carrito, checkout, pedidos                          (Zona C)
-    reader/       biblioteca, lector, progreso y marcadores           (Zona C)
-    seller/       panel y formulario del vendedor                     (Zona D)
-    admin/        moderación y usuarios                               (Zona D)
-  hooks/  lib/  services/firebase.ts  types/  data/
-api/
-  ai.ts           función serverless de Vercel que consulta a Gemini
+    auth/         sesión, login y registro, perfil, perfil público
+    catalog/      catálogo, ficha, muestra, escáner, reseñas, denuncias, favoritos, recomendaciones IA
+    shop/         carrito, checkout, pedidos
+    reader/       biblioteca, lector, progreso y marcadores
+    seller/       panel del vendedor, carga de libros, sinopsis IA, estadísticas
+    admin/        revisión, denuncias, búsqueda, usuarios, registro de auditoría
+  lib/  services/  types/
+api/              funciones serverless de Vercel
+  _lib/           lógica compartida (Firebase Admin, Gemini, Mercado Pago, pedidos…)
+tests/            reglas de Firestore y lógica del servidor contra el emulador
 ```
 
-Cada módulo expone su estado con un Provider + hook (`useBooks`, `useCart`, `useLibrary`, `useReviews`…). Hoy guardan datos de ejemplo en `localStorage`; cada zona reemplaza la implementación de **su** Provider por Firestore sin cambiar la interfaz que usan las pantallas.
+Cada módulo expone su estado con un Provider y un hook (`useBooks`, `useCart`, `useLibrary`, `useOrders`…) que leen y escriben en Firestore.
 
-## Convenciones
+## Datos y seguridad
 
-- Imports siempre absolutos con `@/` (ej. `@/constants/routes`); los relativos están prohibidos por ESLint. El orden y la separación en grupos (librerías → `@/` → estilos) los aplica `npm run format`.
-- Nombres descriptivos: nada de variables de una letra (`book`, `event`, `review`…), ESLint lo marca.
-- IDs nuevos con `createId()` (`@/lib/ids`); los IDs compuestos de Firestore con `docIds` (`@/constants/firestore`).
-- VS Code: instalar las extensiones recomendadas (Prettier y ESLint); se formatea al guardar.
-- Rutas: nunca strings sueltos. Se declaran en `src/constants/routes.ts` y se usan `ROUTES.library`, `paths.book(id)`.
-- Claves de `localStorage` en `src/constants/storageKeys.ts`; colecciones de Firestore en `src/constants/firestore.ts` y acceso con `firestoreRefs` (`src/services/firestore.ts`).
-- Estados y valores permitidos sólo desde `src/constants/statuses.ts`.
-- Páginas protegidas con `<RequireRole roles={[...]}>` en `src/app/App.tsx`.
-- Modales con `components/ui/Modal` (cierra con Esc y clic afuera).
-- Sin comentarios en el código.
+Todo se guarda en Firestore: `users` (con `favorites`, `cart`, `library` y `purchases`), `books`, `bookContents`, `orders`, `reviews`, `reports` y `auditLog`. `firestore.rules` define quién lee y escribe cada colección y está cubierto por tests en el emulador. Se publica con `npx firebase deploy --only firestore:rules`.
 
-## IA con Gemini
+- Nadie cambia su propio rol, email ni estado de bloqueo; un usuario bloqueado no puede publicar, comprar, reseñar ni denunciar.
+- Los libros se crean como borrador; sólo el admin publica, y rechazar o retirar exige un motivo.
+- El texto completo de un libro (`bookContents`) sólo lo leen su vendedor, el admin y quien lo compró.
+- Los pedidos sólo los lee su comprador; los vendedores ven sus ventas con `/api/seller/sales`, que devuelve únicamente sus propias líneas.
+- Cada acción de moderación se guarda en la misma escritura que su entrada en `auditLog` (admin, acción, objeto, motivo, fecha y hora); las entradas no se pueden editar ni borrar.
 
-El navegador nunca ve la API key: el front llama a `/api/ai` (función de Vercel en `api/ai.ts`) y la función consulta a Gemini con `GEMINI_API_KEY`. Sólo responde a usuarios con sesión de Firebase y hasta 10 consultas por minuto por usuario. En local, `npm run dev` sirve la misma función tomando la key de `.env.local`; en Vercel se carga en Settings → Environment Variables. `GEMINI_MODEL` es opcional (por defecto `gemini-3.8-flash`); si el modelo está saturado se reintenta con `gemini-3.6-flash`.
+## Funciones del servidor (`api/`)
 
-Desde cualquier pantalla se usa el hook `useAI()`:
+| Ruta                                          | Para qué                                                                          |
+| --------------------------------------------- | --------------------------------------------------------------------------------- |
+| `/api/ai`                                     | consulta a Gemini con la sesión del usuario (sinopsis del vendedor)               |
+| `/api/recommendations`                        | asistente que recomienda hasta 3 libros del catálogo                              |
+| `/api/checkout`                               | valida el carrito en el servidor, crea el pedido y la preferencia de Mercado Pago |
+| `/api/payments/webhook`, `/api/payments/sync` | confirman el pago con Mercado Pago                                                |
+| `/api/payments/simulate`                      | pago simulado cuando no hay `MP_ACCESS_TOKEN`                                     |
+| `/api/reader/sync`                            | ajusta las páginas y el progreso del lector de un libro comprado                  |
+| `/api/seller/sales`                           | ventas del vendedor que inició sesión                                             |
+| `/api/admin/block`                            | bloquea o desbloquea un usuario (también deshabilita su cuenta en Firebase Auth)  |
 
-```tsx
-import { useAI } from '@/hooks/useAI';
+Todas verifican el token de Firebase del usuario. Las consultas a Gemini tienen un límite de 10 por minuto por usuario y, si un modelo falla o está saturado, se prueba con otro.
 
-const BookSummary: React.FC<{ book: Book }> = ({ book }) => {
-  const { ask, isLoading, error } = useAI();
-  const [summary, setSummary] = useState<string | null>(null);
+### Pagos
 
-  const summarize = async () => {
-    const text = await ask({
-      systemInstruction: 'Sos un librero. Respondé en español, en 3 oraciones.',
-      prompt: `Resumí "${book.title}" de ${book.author}: ${book.description}`,
-    });
-    if (text) setSummary(text);
-  };
+El navegador nunca marca un pedido como pagado. `/api/checkout` crea el pedido `pending`; si el comprador tenía otro intento abierto, lo cancela y vence su link de pago, así no se paga dos veces lo mismo. Al aprobarse el pago, una sola transacción marca el pedido `paid`, descuenta stock, suma ventas, agrega los digitales a la biblioteca y vacía el carrito. Para pagar en el sandbox de Mercado Pago se usa una cuenta de prueba de comprador.
 
-  return (
-    <>
-      <button onClick={summarize} disabled={isLoading}>
-        {isLoading ? 'Pensando…' : 'Resumir con IA'}
-      </button>
-      {error && <p className="text-red-600">{error}</p>}
-      {summary && <p>{summary}</p>}
-    </>
-  );
-};
-```
+### Lector
 
-- `ask({ prompt, systemInstruction?, json? })` devuelve el texto o `null` si falló; en ese caso `error` trae un mensaje listo para mostrar (sin sesión, límite de consultas, IA caída, sin conexión).
-- Con `json: true` Gemini responde JSON; pedir el formato en el prompt y hacer `JSON.parse(text)`.
-- La app sigue funcionando aunque la IA falle: mostrar `error` y no bloquear la pantalla.
+El texto se divide en páginas de unos 18 renglones (`paginateReaderText`), partiendo los párrafos largos al final de una oración. El progreso y los marcadores se guardan en Firestore, así se conservan entre dispositivos y sesiones.
+
+## Calidad
+
+- `npm run lint`, `npm test` y `npm run test:rules` en verde antes de cada PR.
+- Lighthouse en catálogo y ficha: accesibilidad 100, buenas prácticas 100, SEO 100.
+- Sin errores de consola y sin desplazamiento horizontal en 390, 768 y 1280 px.
 
 ## Flujo de trabajo
 
 1. Tomar la tarjeta en Trello y moverla a **En proceso**.
-2. Rama desde `dev` actualizado: `feat/<código>-<descripción>` (ej. `feat/b1-catalogo`) o `fix/<descripción>`.
+2. Rama desde `dev`: `feat/<código>-<descripción>` o `fix/<descripción>`.
 3. Commits en inglés: `feat: …`, `fix: …`, `refactor: …`, `test: …`, `docs: …`.
-4. Antes del PR: `npm run lint`, `npm test`, `npm run build` en verde.
-5. PR a `dev` (squash merge). `main` sólo para entregas.
+4. PR a `dev` con squash merge. `main` es producción: cada push despliega en Vercel.
+
+Convenciones del código: imports absolutos con `@/`, nombres descriptivos, rutas, colecciones y estados sólo desde `src/constants`, IDs con `createId()`, sin comentarios.
 
 ## Equipo
 
-Joaquín Limeres · Katia Malena Pardo · Ainur Munasipov · Lev Tsatsorin
+| Integrante         | Zona                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------ |
+| Lev Tsatsorin      | Infraestructura y Firebase, reglas, integración con Gemini, catálogo y ficha, pagos        |
+| Katia Malena Pardo | Perfil y favoritos, denuncias, asistente de recomendaciones                                |
+| Ainur Munasipov    | Carrito y checkout, pedidos, lector, muestras y búsqueda por ISBN                          |
+| Joaquín Limeres    | Repositorio y despliegue, publicación de libros, sinopsis con IA, estadísticas, moderación |

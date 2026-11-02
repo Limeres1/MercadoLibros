@@ -277,7 +277,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
               setShowSettings(false);
             }}
             className={`p-2 rounded-lg transition-colors relative ${
-              showBookmarksList ? 'bg-amber-500/20 text-amber-600' : 'hover:opacity-80'
+              showBookmarksList ? 'bg-amber-500/20 text-amber-700' : 'hover:opacity-80'
             }`}
             title="Marcadores y notas"
           >
@@ -293,7 +293,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
               setShowBookmarksList(false);
             }}
             className={`p-2 rounded-lg transition-colors ${
-              showSettings ? 'bg-amber-500/20 text-amber-600' : 'hover:opacity-80'
+              showSettings ? 'bg-amber-500/20 text-amber-700' : 'hover:opacity-80'
             }`}
             title="Personalizar Lector: Temas y Tamaño de Letra"
           >
@@ -316,14 +316,15 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
         >
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 reader-dark:border-slate-800 mb-4">
             <h4 className="font-bold text-sm flex items-center gap-2">
-              <Type className="w-4 h-4 text-amber-600" />
+              <Type className="w-4 h-4 text-amber-700" />
               <span>Personalización de Lectura</span>
             </h4>
             <button
               onClick={() => setShowSettings(false)}
+              aria-label="Cerrar personalización"
               className="text-slate-400 hover:text-slate-600 reader-dark:hover:text-slate-200"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
 
@@ -341,7 +342,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
                     : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                <Sun className="w-4 h-4 text-amber-600" />
+                <Sun className="w-4 h-4 text-amber-700" />
                 <span>Claro</span>
               </button>
 
@@ -381,7 +382,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
               >
                 Tamaño de letra
               </label>
-              <span className="text-xs font-bold text-amber-600">{readerSettings.fontSize}px</span>
+              <span className="text-xs font-bold text-amber-700">{readerSettings.fontSize}px</span>
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -471,14 +472,15 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
         >
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 reader-dark:border-slate-800 mb-3">
             <h4 className="font-bold text-sm flex items-center gap-2">
-              <BookmarkIcon className="w-4 h-4 text-amber-600" />
+              <BookmarkIcon className="w-4 h-4 text-amber-700" />
               <span>Marcadores y Notas</span>
             </h4>
             <button
               onClick={() => setShowBookmarksList(false)}
+              aria-label="Cerrar marcadores"
               className="text-slate-400 hover:text-slate-600 reader-dark:hover:text-slate-200"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
 
@@ -487,7 +489,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
             className="mb-4 bg-slate-50 reader-dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 reader-dark:border-slate-700"
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-amber-600">Marcador en Página {currentPage}</span>
+              <span className="text-xs font-bold text-amber-700">Marcador en Página {currentPage}</span>
             </div>
             <input
               type="text"
@@ -510,7 +512,7 @@ const Reader: React.FC<{ book: Book; libraryItem: LibraryItem; contentText: stri
             <button
               type="submit"
               disabled={isSavingBookmark}
-              className="w-full py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+              className="w-full py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>{isSavingBookmark ? 'Guardando…' : 'Guardar Marcador'}</span>

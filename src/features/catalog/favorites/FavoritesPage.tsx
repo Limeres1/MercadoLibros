@@ -42,7 +42,7 @@ export const FavoritesPage: React.FC = () => {
           </p>
           <button
             onClick={() => navigate(ROUTES.home)}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors"
+            className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold transition-colors"
           >
             Explorar Catálogo
           </button>
@@ -86,7 +86,7 @@ export const FavoritesPage: React.FC = () => {
                   <span className="font-black text-base text-slate-900">${book.price.toFixed(2)}</span>
                   <button
                     onClick={() => addToCart(book)}
-                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs"
+                    className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs"
                   >
                     <ShoppingBag className="w-3.5 h-3.5" />
                     <span>Comprar</span>

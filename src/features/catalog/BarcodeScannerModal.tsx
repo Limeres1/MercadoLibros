@@ -249,7 +249,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
             <button
               onClick={startCamera}
               disabled={cameraStarting || searching}
-              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold transition-colors"
+              className="px-3.5 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-semibold transition-colors"
             >
               {cameraStarting ? 'Iniciando cámara…' : 'Reintentar Cámara'}
             </button>
@@ -298,7 +298,7 @@ export const BarcodeScannerModal: React.FC<{ onClose: () => void }> = ({ onClose
 
         <div>
           <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-            <BookOpen className="w-3 h-3 text-amber-600" />
+            <BookOpen className="w-3 h-3 text-amber-700" />
             Códigos de prueba del catálogo:
           </p>
           <div className="grid grid-cols-2 gap-2 text-left">

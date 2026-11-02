@@ -276,7 +276,7 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                  <Award className="w-4 h-4 text-amber-600" />
+                  <Award className="w-4 h-4 text-amber-700" />
                   <span>Mis 4 Libros Favoritos en el Perfil</span>
                 </h4>
                 <p className="text-xs text-slate-500">
@@ -329,7 +329,7 @@ const ProfileForm: React.FC<{ currentUser: UserProfile }> = ({ currentUser }) =>
                         </p>
                         <p className="text-[11px] text-slate-500 truncate">{book.author}</p>
                       </div>
-                      <Plus className="w-4 h-4 text-amber-600 shrink-0" />
+                      <Plus className="w-4 h-4 text-amber-700 shrink-0" />
                     </button>
                   ))}
                 </div>

@@ -29,7 +29,7 @@ export const RequireRole: React.FC<RequireRoleProps> = ({ roles, children }) => 
         action={
           <button
             onClick={() => openAuth('login')}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-bold transition-colors"
+            className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-sm font-bold transition-colors"
           >
             Ingresar
           </button>

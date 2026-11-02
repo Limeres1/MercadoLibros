@@ -159,7 +159,7 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({ value, onChange })
       <div className="relative z-30">
         <div className="flex items-center justify-between">
           <label htmlFor={`${listId}-input`} className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <MapPin className="h-4 w-4 text-amber-600" aria-hidden="true" />
+            <MapPin className="h-4 w-4 text-amber-700" aria-hidden="true" />
             Dirección de envío
           </label>
           <button

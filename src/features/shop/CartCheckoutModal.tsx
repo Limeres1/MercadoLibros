@@ -102,7 +102,7 @@ const CartCheckoutDialog: React.FC = () => {
             <button
               type="button"
               onClick={closeCart}
-              className="mt-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+              className="mt-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
             >
               Ver el catálogo
             </button>
@@ -248,7 +248,7 @@ const CartCheckoutDialog: React.FC = () => {
               key="continue"
               type="button"
               onClick={goToCheckout}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-600 py-3 text-sm font-bold text-white hover:bg-amber-700"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-700 py-3 text-sm font-bold text-white hover:bg-amber-800"
             >
               Continuar
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
